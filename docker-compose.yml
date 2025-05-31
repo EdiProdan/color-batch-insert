@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: thesis_neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/research123
+
+      # Memory Configuration
+      - NEO4J_dbms_memory_heap_initial__size=1G
+      - NEO4J_dbms_memory_heap_max__size=2G
+      - NEO4J_dbms_memory_pagecache_size=1G
+
+      # Default Database
+      - NEO4J_dbms_default__database=research
+
+      # Query Logging
+      - NEO4J_db_logs_query_enabled=INFO
+      - NEO4J_db_logs_query_threshold=1s
+      - NEO4J_dbms_logs_query_parameter__logging__enabled=true
+
+      # Transaction & Concurrency
+      - NEO4J_dbms_transaction_timeout=300s
+      - NEO4J_dbms_transaction_concurrent_maximum=500
+      - NEO4J_dbms_lock_acquisition_timeout=60s
+
+      # Import/Bulk loading optimization
+      - NEO4J_dbms_tx__log_rotation_retention__policy=false
+      - NEO4J_dbms_checkpoint_interval_time=30s
+      - NEO4J_dbms_checkpoint_interval_tx=100000
+
+      # Security (Procedures for APOC & GDS)
+      - NEO4J_dbms_security_procedures_unrestricted=gds.*,apoc.*
+      - NEO4J_dbms_security_procedures_allowlist=gds.*,apoc.*
+
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '1.5'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "research123", "RETURN 1 as health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  neo4j_import:
+    driver: local
