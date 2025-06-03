@@ -2,6 +2,7 @@ data:
   input:
     text_dir: "data/input/text/"
     images_dir: "data/input/images/"
+  output: "data/output/"
 
 spacy:
-    model: "en_core_web_sm"
+    model: "en_core_web_md"

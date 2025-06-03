@@ -6,9 +6,15 @@ class PipelineController:
     def __init__(self, config):
         self.config = config
         self.text_pipeline = TextPipeline(self.config)
-        # TODO: self.image_pipeline = ImagePipeline(config)
+        # self.image_pipeline = ImagePipeline(self.config)
 
     def run_pipeline(self):
-        # Phase 1: Content Extraction
-        self.text_pipeline.process()
 
+        print("Starting pipeline execution...")
+
+        self.text_pipeline.process()
+        # self.image_pipeline.process()
+
+        # self.graph_loader
+
+        print("\nPipeline execution completed successfully.")
