@@ -2,7 +2,56 @@ data:
   input:
     text_dir: "data/input/text/"
     images_dir: "data/input/images/"
-  output: "data/output/"
+  output: "data/output/experimental_scenarios/"
 
 spacy:
     model: "en_core_web_md"
+
+evaluation:
+    enabled: true
+    #scenarios: ["high-precision", "moderate-connectivity", "comprehensive"]
+#    scenarios: ["dev_a_precision", "dev_b_balanced", "dev_c_diverse"]
+    scenarios: ["dev_a_precision"]
+    runs_per_algorithm: 1
+    metrics:
+      - "total_time"
+      - "batch_processing_time"
+      - "conflict_frequency"
+      - "throughput"
+      - "memory_usage"
+      - "cpu_utilization"
+    output_dir: "data/evaluation/"
+
+database:
+  neo4j:
+    uri: "bolt://localhost:7687"
+    user: "neo4j"
+    password: "research123"
+    database: "research"
+
+algorithms:
+  baseline:
+    name: "Static Sequential Batching Algorithm"
+    description: "Traditional fixed-size batching for sequential data."
+    parameters:
+      batch_sizes: [250, 500, 1000]
+      timeout: 300 # seconds
+      retry_attempts: 3
+
+  apoc:
+    name: "APOC-Style Parallel Batching Algorithm"
+    description: "Industry standard batching approach"
+    implementation: "ApocBatchProcessor"
+    parameters:
+      batch_size: 100
+      max_wait_time: 30
+
+  adaptive:
+    name: "Adaptive Dynamic Batching Algorithm"
+    description: "Dynamic batching based on data characteristics."
+    implementation: "AdaptiveBatchProcessor"
+    parameters:
+      min_batch_size: 10
+      max_batch_size: 100
+      adaptive_factor: 0.5
+
