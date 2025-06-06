@@ -10,6 +10,11 @@ services:
     environment:
       - NEO4J_AUTH=neo4j/research123
 
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*
+
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
       # Memory Configuration
       - NEO4J_dbms_memory_heap_initial__size=1G
       - NEO4J_dbms_memory_heap_max__size=2G
@@ -24,9 +29,11 @@ services:
       - NEO4J_dbms_logs_query_parameter__logging__enabled=true
 
       # Transaction & Concurrency
-      - NEO4J_dbms_transaction_timeout=300s
-      - NEO4J_dbms_transaction_concurrent_maximum=500
+      # APOC nije moga ozbog hotspotova
+      - NEO4J_dbms_transaction_timeout=2500s
+      - NEO4J_dbms_transaction_concurrent_maximum=100
       - NEO4J_dbms_lock_acquisition_timeout=60s
+
 
       # Import/Bulk loading optimization
       - NEO4J_dbms_tx__log_rotation_retention__policy=false

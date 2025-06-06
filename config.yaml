@@ -34,17 +34,33 @@ algorithms:
     name: "Static Sequential Batching Algorithm"
     description: "Traditional fixed-size batching for sequential data."
     parameters:
-      batch_sizes: [250, 500, 1000]
-      timeout: 300 # seconds
+      batch_sizes: [50, 100]  # Smaller batches for more conflicts
+      thread_counts: [2, 3, 4]  # Test different parallelism levels
+      timeout: 300
       retry_attempts: 3
+      hub_threshold: 5
+
+  working_parallel:
+    name: "Working Parallel Baseline"
+    description: "Parallel processing baseline for thesis research"
+    parameters:
+      batch_size: 100
+      thread_count: 3
+      timeout: 120
+      retry_attempts: 2
 
   apoc:
     name: "APOC-Style Parallel Batching Algorithm"
-    description: "Industry standard batching approach"
-    implementation: "ApocBatchProcessor"
+    description: "Industry standard parallel batching with retry logic"
     parameters:
-      batch_size: 100
-      max_wait_time: 30
+      batch_size: 100  # Reduced for high-connectivity dataset
+      max_workers: 1  # Start with sequential to establish baseline
+      max_wait_time: 45
+      retry_attempts: 5
+      timeout: 600  # Increased timeout
+      hub_threshold: 5
+      parallel_batches: false
+      iterative_processing: true
 
   adaptive:
     name: "Adaptive Dynamic Batching Algorithm"
@@ -55,3 +71,23 @@ algorithms:
       max_batch_size: 100
       adaptive_factor: 0.5
 
+  conflict:
+    name: "Realistic Conflict Resolution Algorithm"
+    description: "Algorithm designed to handle conflicts in data processing."
+    implementation: "ConflictResolutionProcessor"
+    parameters:
+      conflict_threshold: 0.1  # Adjust based on expected conflict rate
+      retry_attempts: 3
+      max_wait_time: 60
+      batch_size: 50  # Smaller batches to manage conflicts effectively
+      parallel_batches: true
+      iterative_processing: true
+
+  mix_and_batch:
+    name: "Mix and Batch Parallel Algorithm"
+    description: "Published parallel loading approach with conflict-free partitioning"
+    num_partitions: 10  # Number of virtual partitions for nodes
+    max_workers: 8      # Number of parallel threads
+    batch_size: 1000    # Not used in partitioning, but for metrics
+    hash_digits: 1      # Digits used for partition assignment
+    hub_threshold: 5    # For conflict analysis

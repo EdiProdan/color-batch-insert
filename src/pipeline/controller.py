@@ -1,6 +1,8 @@
+from src.evaluation.conflict_generating_algorithm import ConflictGeneratorAlgorithm
+from src.evaluation.mix_and_batch_algorithm import MixAndBatchAlgorithm
+from src.evaluation.parallel_basline_algorithm import WorkingParallelBaseline
 from src.pipeline.text_pipeline import TextPipeline
-from src.evaluation import EvaluationFramework, BaselineAlgorithm
-
+from src.evaluation import EvaluationFramework, BaselineAlgorithm, ApocAlgorithm
 
 class PipelineController:
 
@@ -38,11 +40,18 @@ class PipelineController:
             # Initialize evaluation framework
             evaluation_framework = EvaluationFramework(self.config)
 
-            # Register all algorithms for comparison
+            # from src.evaluation import EvaluationFramework, BaselineAlgorithm, ApocAlgorithm
+            #
+            # # In the process_evaluation method:
             evaluation_framework.register_algorithm(
-                BaselineAlgorithm,
-                self.config['algorithms']['baseline']
+                MixAndBatchAlgorithm,
+                self.config['algorithms']['mix_and_batch']
             )
+
+            # evaluation_framework.register_algorithm(
+            #     ApocAlgorithm,
+            #     self.config['algorithms']['apoc']
+            # )
 
             # Execute comprehensive evaluation
             print("\nStarting algorithm evaluation experiments...")
