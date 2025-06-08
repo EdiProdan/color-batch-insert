@@ -1,8 +1,6 @@
-from src.evaluation.conflict_generating_algorithm import ConflictGeneratorAlgorithm
-from src.evaluation.mix_and_batch_algorithm import MixAndBatchAlgorithm
-from src.evaluation.parallel_basline_algorithm import WorkingParallelBaseline
 from src.pipeline.text_pipeline import TextPipeline
-from src.evaluation import EvaluationFramework, BaselineAlgorithm, ApocAlgorithm
+from src.evaluation import EvaluationFramework, SimpleSequentialBaseline
+
 
 class PipelineController:
 
@@ -27,10 +25,7 @@ class PipelineController:
 
     def process_evaluation(self):
         """
-        Evaluation framework execution
-
-        This mode runs your algorithm comparison experiments.
-        Requires relationship data to already exist from data processing mode.
+        Evaluation framework execution with proper algorithm initialization
         """
         print("Initializing evaluation framework...")
 
@@ -40,17 +35,38 @@ class PipelineController:
             # Initialize evaluation framework
             evaluation_framework = EvaluationFramework(self.config)
 
-            # from src.evaluation import EvaluationFramework, BaselineAlgorithm, ApocAlgorithm
-            #
-            # # In the process_evaluation method:
+            # 1. REGISTER SIMPLE BASELINE (Control Group)
             evaluation_framework.register_algorithm(
-                MixAndBatchAlgorithm,
-                self.config['algorithms']['mix_and_batch']
+                SimpleSequentialBaseline,
+                self.config['algorithms']['simple_baseline']
             )
 
+            # 2. REGISTER OTHER BASELINES FOR COMPARISON
+            # from src.evaluation import BaselineAlgorithm
             # evaluation_framework.register_algorithm(
-            #     ApocAlgorithm,
-            #     self.config['algorithms']['apoc']
+            #     BaselineAlgorithm,
+            #     self.config['algorithms']['sequential_multi']
+            # )
+            #
+            # # 3. REGISTER PARALLEL APPROACHES
+            # from src.evaluation import WorkingParallelBaseline
+            # evaluation_framework.register_algorithm(
+            #     WorkingParallelBaseline,
+            #     self.config['algorithms']['working_parallel']
+            # )
+            #
+            # # 4. REGISTER MIX AND BATCH
+            # from src.evaluation import MixAndBatchAlgorithm
+            # evaluation_framework.register_algorithm(
+            #     MixAndBatchAlgorithm,
+            #     self.config['algorithms']['mix_and_batch']
+            # )
+
+            # 5. REGISTER YOUR ADAPTIVE ALGORITHM (when ready)
+            # from src.evaluation import AdaptiveDynamicAlgorithm
+            # evaluation_framework.register_algorithm(
+            #     AdaptiveDynamicAlgorithm,
+            #     self.config['algorithms']['adaptive_dynamic']
             # )
 
             # Execute comprehensive evaluation
@@ -59,7 +75,6 @@ class PipelineController:
 
         except Exception as e:
             print(f"Evaluation failed: {e}")
-            print("Ensure relationship data exists from data processing mode")
             raise
         finally:
             if evaluation_framework:

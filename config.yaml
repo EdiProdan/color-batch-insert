@@ -29,65 +29,67 @@ database:
     password: "research123"
     database: "research"
 
-algorithms:
-  baseline:
-    name: "Static Sequential Batching Algorithm"
-    description: "Traditional fixed-size batching for sequential data."
-    parameters:
-      batch_sizes: [50, 100]  # Smaller batches for more conflicts
-      thread_counts: [2, 3, 4]  # Test different parallelism levels
-      timeout: 300
-      retry_attempts: 3
-      hub_threshold: 5
 
+algorithms:
+  # 1. SIMPLE SEQUENTIAL BASELINE (Your Control Group)
+  simple_baseline:
+    name: "Simple Sequential Baseline"
+    description: "Minimal sequential processing with no optimization"
+#    batch_size: 500  # Single batch size for initial testing
+    batch_sizes: [100, 250, 500, 1000]  # Array for testing multiple sizes
+    # That's it! Intentionally minimal configuration
+
+  # 2. SEQUENTIAL WITH MULTIPLE BATCH SIZES (For comparison)
+  sequential_multi:
+    name: "Sequential Multi-Batch Testing"
+    description: "Tests multiple batch sizes to find optimal"
+    batch_sizes: [250, 500, 1000]  # Array for testing multiple sizes
+    timeout: 300
+    retry_attempts: 3
+    hub_threshold: 5
+
+  # 3. PARALLEL BASELINE
   working_parallel:
     name: "Working Parallel Baseline"
     description: "Parallel processing baseline for thesis research"
-    parameters:
-      batch_size: 100
-      thread_count: 3
-      timeout: 120
-      retry_attempts: 2
+    batch_size: 100
+    thread_count: 3
+    timeout: 120
+    retry_attempts: 2
 
-  apoc:
-    name: "APOC-Style Parallel Batching Algorithm"
-    description: "Industry standard parallel batching with retry logic"
-    parameters:
-      batch_size: 100  # Reduced for high-connectivity dataset
-      max_workers: 1  # Start with sequential to establish baseline
-      max_wait_time: 45
-      retry_attempts: 5
-      timeout: 600  # Increased timeout
-      hub_threshold: 5
-      parallel_batches: false
-      iterative_processing: true
-
-  adaptive:
-    name: "Adaptive Dynamic Batching Algorithm"
-    description: "Dynamic batching based on data characteristics."
-    implementation: "AdaptiveBatchProcessor"
-    parameters:
-      min_batch_size: 10
-      max_batch_size: 100
-      adaptive_factor: 0.5
-
-  conflict:
-    name: "Realistic Conflict Resolution Algorithm"
-    description: "Algorithm designed to handle conflicts in data processing."
-    implementation: "ConflictResolutionProcessor"
-    parameters:
-      conflict_threshold: 0.1  # Adjust based on expected conflict rate
-      retry_attempts: 3
-      max_wait_time: 60
-      batch_size: 50  # Smaller batches to manage conflicts effectively
-      parallel_batches: true
-      iterative_processing: true
-
+  # 4. MIX AND BATCH (Published Algorithm)
   mix_and_batch:
     name: "Mix and Batch Parallel Algorithm"
     description: "Published parallel loading approach with conflict-free partitioning"
-    num_partitions: 10  # Number of virtual partitions for nodes
-    max_workers: 8      # Number of parallel threads
-    batch_size: 1000    # Not used in partitioning, but for metrics
-    hash_digits: 1      # Digits used for partition assignment
-    hub_threshold: 5    # For conflict analysis
+    num_partitions: 10
+    max_workers: 8
+    batch_size: 1000
+    hash_digits: 1
+    hub_threshold: 5
+
+  # 5. YOUR ADAPTIVE ALGORITHM (Research Contribution)
+  adaptive_dynamic:
+    name: "Adaptive Dynamic Batching Algorithm"
+    description: "Intelligent conflict-aware dynamic batching with real-time adaptation"
+    # Initial parameters (will adapt during execution)
+    initial_batch_size: 500
+    min_batch_size: 50
+    max_batch_size: 2000
+
+    # Adaptation parameters
+    conflict_threshold: 0.05  # 5% conflict rate triggers adaptation
+    adaptation_rate: 0.3      # How aggressively to adjust
+    learning_window: 5        # Batches to consider for adaptation
+
+    # Parallelism control
+    initial_parallelism: 4
+    min_parallelism: 1
+    max_parallelism: 8
+
+    # Conflict prediction
+    hub_threshold: 5
+    prediction_confidence: 0.8
+
+    # Performance targets
+    target_throughput: 1000  # relationships/second
+    acceptable_failure_rate: 0.01  # 1% max failure
