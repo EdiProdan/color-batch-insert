@@ -12,7 +12,7 @@ evaluation:
     #scenarios: ["high-precision", "moderate-connectivity", "comprehensive"]
 #    scenarios: ["dev_a_precision", "dev_b_balanced", "dev_c_diverse"]
     scenarios: ["dev_a_precision"]
-    runs_per_algorithm: 1
+    runs_per_algorithm: 5
     metrics:
       - "total_time"
       - "batch_processing_time"
@@ -35,27 +35,17 @@ algorithms:
   simple_baseline:
     name: "Simple Sequential Baseline"
     description: "Minimal sequential processing with no optimization"
-#    batch_size: 500  # Single batch size for initial testing
-    batch_sizes: [100, 250, 500, 1000]  # Array for testing multiple sizes
+    batch_size: 500  # Single batch size for initial testing
+    #batch_sizes: [250]  # Array for testing multiple sizes
     # That's it! Intentionally minimal configuration
 
   # 2. SEQUENTIAL WITH MULTIPLE BATCH SIZES (For comparison)
-  sequential_multi:
-    name: "Sequential Multi-Batch Testing"
-    description: "Tests multiple batch sizes to find optimal"
-    batch_sizes: [250, 500, 1000]  # Array for testing multiple sizes
-    timeout: 300
-    retry_attempts: 3
-    hub_threshold: 5
-
-  # 3. PARALLEL BASELINE
-  working_parallel:
-    name: "Working Parallel Baseline"
-    description: "Parallel processing baseline for thesis research"
+  simple_parallel:
+    name: "Simple Parallel Baseline"
+    description: "Naive parallel processing"
     batch_size: 100
-    thread_count: 3
-    timeout: 120
-    retry_attempts: 2
+    thread_count: 10      # Fixed parallelism
+    timeout: 60
 
   # 4. MIX AND BATCH (Published Algorithm)
   mix_and_batch:

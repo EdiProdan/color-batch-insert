@@ -9,61 +9,67 @@ services:
       - "7687:7687"
     environment:
       - NEO4J_AUTH=neo4j/research123
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
 
+      # APOC Plugin
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
       - NEO4J_dbms_security_procedures_allowlist=apoc.*
 
-      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
-      # Memory Configuration
-      - NEO4J_dbms_memory_heap_initial__size=1G
-      - NEO4J_dbms_memory_heap_max__size=2G
-      - NEO4J_dbms_memory_pagecache_size=1G
+      # Memory Configuration (Optimized for 16GB system)
+      # Rule of thumb: heap = 40% of available memory, page cache = 30%
+      - NEO4J_dbms_memory_heap_initial__size=3G
+      - NEO4J_dbms_memory_heap_max__size=3G
+      - NEO4J_dbms_memory_pagecache_size=2G
+
+      # Transaction Pool (Critical for conflict detection)
+      - NEO4J_dbms_memory_transaction_total_max=2G
 
       # Default Database
       - NEO4J_dbms_default__database=research
 
-      # Query Logging
-      - NEO4J_db_logs_query_enabled=INFO
-      - NEO4J_db_logs_query_threshold=1s
-      - NEO4J_dbms_logs_query_parameter__logging__enabled=true
+      # Query Performance Monitoring
+      - NEO4J_dbms_logs_query_enabled=INFO
+      - NEO4J_dbms_logs_query_threshold=500ms  # Reduced to catch more queries
 
-      # Transaction & Concurrency
-      # APOC nije moga ozbog hotspotova
-      - NEO4J_dbms_transaction_timeout=2500s
-      - NEO4J_dbms_transaction_concurrent_maximum=100
-      - NEO4J_dbms_lock_acquisition_timeout=60s
+      # Transaction & Lock Configuration (CRITICAL FOR RESEARCH)
+      # These settings will help generate observable conflicts
+      - NEO4J_dbms_transaction_timeout=30s  # Much shorter to observe timeouts
+      - NEO4J_dbms_lock_acquisition_timeout=5s  # Short enough to detect conflicts
+      - NEO4J_dbms_transaction_concurrent_maximum=50  # Constrained to increase contention
 
+      # Checkpoint & Write Performance
+      - NEO4J_dbms_checkpoint_interval_time=15m
+      - NEO4J_dbms_checkpoint_interval_tx=10000
+      - NEO4J_dbms_checkpoint_interval_volume=256m
 
-      # Import/Bulk loading optimization
-      - NEO4J_dbms_tx__log_rotation_retention__policy=false
-      - NEO4J_dbms_checkpoint_interval_time=30s
-      - NEO4J_dbms_checkpoint_interval_tx=100000
+      # Thread Pool Configuration (For parallel algorithms)
+      - NEO4J_dbms_threads_worker__count=8
 
-      # Security (Procedures for APOC & GDS)
-      - NEO4J_dbms_security_procedures_unrestricted=gds.*,apoc.*
-      - NEO4J_dbms_security_procedures_allowlist=gds.*,apoc.*
+      # Additional Performance Settings
+      - NEO4J_dbms_relationship__grouping__threshold=10
+
+      # JVM Additional Options for Better GC Performance
+      - NEO4J_server_jvm_additional=-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+UseStringDeduplication -XX:+ExitOnOutOfMemoryError
 
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
       - neo4j_import:/var/lib/neo4j/import
 
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '1.5'
-        reservations:
-          memory: 2G
-          cpus: '1.0'
-
     healthcheck:
       test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "research123", "RETURN 1 as health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s  # Increased for larger heap
+
+    restart: unless-stopped
+
+    # Network optimizations
+    sysctls:
+      - net.core.somaxconn=1024
+      - net.ipv4.tcp_syncookies=0
 
 volumes:
   neo4j_data:
@@ -72,3 +78,9 @@ volumes:
     driver: local
   neo4j_import:
     driver: local
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1500

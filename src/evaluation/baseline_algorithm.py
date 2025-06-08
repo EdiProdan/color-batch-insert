@@ -20,20 +20,19 @@ class SimpleSequentialBaseline(AlgorithmBase):
 
     def __init__(self, config, driver):
         super().__init__(config, driver)
-        self.batch_sizes = config.get('batch_size', [500])  # Single fixed batch size
+        self.batch_size = config.get('batch_size')  # Single fixed batch size
         self.name = config.get('name', 'Simple Sequential Baseline')
 
-    def insert_relationships(self, relationships: List[Dict]) -> List[PerformanceMetrics]:
-        results = []
-
-        for batch_size in self.batch_sizes:
-            print(f"\n--- Testing batch size: {batch_size} ---")
-            result = self._run_single_batch_size(relationships, batch_size)
-            results.append(result)
-
-        return results
-
-    def _run_single_batch_size(self, relationships: List[Dict], batch_size: int) -> PerformanceMetrics:
+    def insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
+        """
+        Insert relationships in the simplest possible way:
+        1. Create fixed-size batches
+        2. Insert each batch sequentially
+        3. Track minimal metrics
+        """
+        print(f"\nExecuting {self.name}")
+        print(f"Processing {len(relationships)} relationships")
+        print(f"Batch size: {self.batch_size}")
 
         # Start resource monitoring
         monitor = ResourceMonitor()
@@ -43,8 +42,8 @@ class SimpleSequentialBaseline(AlgorithmBase):
         start_time = time.time()
 
         # Create simple fixed-size batches
-        batches = [relationships[i:i + batch_size]
-                   for i in range(0, len(relationships), batch_size)]
+        batches = [relationships[i:i + self.batch_size]
+                   for i in range(0, len(relationships), self.batch_size)]
 
         print(f"Created {len(batches)} batches")
 
@@ -111,7 +110,8 @@ class SimpleSequentialBaseline(AlgorithmBase):
             cpu_avg=resource_metrics['cpu_avg'],
 
             # Batch timing details
-            batch_processing_times=batch_times
+            batch_processing_times=batch_times,
+
         )
 
     def _insert_batch(self, batch: List[Dict], batch_idx: int) -> tuple:
@@ -164,10 +164,10 @@ class SimpleSequentialBaseline(AlgorithmBase):
 
         return conflicts, retries, successes
 
-    def _count_unique_entities(self, relationships: List[Dict]) -> int:
-        """Count unique entities in relationships"""
-        entities = set()
-        for rel in relationships:
-            entities.add(rel['from'])
-            entities.add(rel['to'])
-        return len(entities)
+    # def _count_unique_entities(self, relationships: List[Dict]) -> int:
+    #     """Count unique entities in relationships"""
+    #     entities = set()
+    #     for rel in relationships:
+    #         entities.add(rel['from'])
+    #         entities.add(rel['to'])
+    #     return len(entities)

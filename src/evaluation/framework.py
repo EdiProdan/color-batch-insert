@@ -47,125 +47,6 @@ class PerformanceMetrics:
     # Analysis depth (optional but valuable)
     batch_processing_times: List[float]  # Shows learning patterns
 
-class ConflictAnalyzer:
-    """
-    Analyzes relationship batches to predict conflicts before database insertion
-    This is a key component of your adaptive algorithm research
-    """
-
-    def __init__(self, hub_threshold: int = 5):
-        """
-        Initialize conflict analyzer
-
-        Args:
-            hub_threshold: Number of relationships that makes an entity a "hub" (conflict-prone)
-        """
-        self.hub_threshold = hub_threshold
-        self.conflict_history = defaultdict(int)  # Track historical conflicts per entity
-
-    def detect_conflicts_in_batch(self, batch):
-        """
-        Analyze a batch to predict potential conflicts
-
-        This method implements the core logic your adaptive algorithm will use
-        to intelligently reorganize batches before insertion.
-
-        Returns:
-            Dictionary containing conflict analysis results
-        """
-        # Count how many times each entity appears in this batch
-        entity_frequency = Counter()
-
-        for relationship in batch:
-            entity_frequency[relationship['from']] += 1
-            entity_frequency[relationship['to']] += 1
-
-        # Identify potential conflict entities
-        conflict_entities = {
-            entity: count for entity, count in entity_frequency.items()
-            if count >= self.hub_threshold
-        }
-
-        # Identify hub entities (high-frequency entities prone to conflicts)
-        hub_entities = {
-            entity: count for entity, count in entity_frequency.items()
-            if count >= self.hub_threshold
-        }
-
-        # Calculate conflict probability based on entity overlap
-        total_predicted_conflicts = sum(
-            max(0, count - 1) for count in entity_frequency.values()
-            if count > 1
-        )
-
-        # Identify relationships involving conflict-prone entities
-        conflicting_relationships = []
-        for i, rel in enumerate(batch):
-            if (rel['from'] in conflict_entities or
-                    rel['to'] in conflict_entities):
-                conflicting_relationships.append(i)
-
-        return {
-            'total_predicted_conflicts': total_predicted_conflicts,
-            'conflict_entities': conflict_entities,
-            'hub_entities': hub_entities,
-            'conflicting_relationship_indices': conflicting_relationships,
-            'entity_frequency_distribution': dict(entity_frequency),
-            'max_entity_frequency': max(entity_frequency.values()) if entity_frequency else 0,
-            'conflict_hotspots': [
-                entity for entity, count in entity_frequency.most_common(10)
-                if count >= self.hub_threshold
-            ]
-        }
-
-    def analyze_cross_batch_conflicts(self, batches):
-        """
-        Analyze conflicts between different batches (for parallel processing)
-
-        This helps predict which batches might conflict when processed simultaneously
-        """
-        batch_entities = []
-
-        # Extract entities for each batch
-        for batch in batches:
-            entities = set()
-            for rel in batch:
-                entities.add(rel['from'])
-                entities.add(rel['to'])
-            batch_entities.append(entities)
-
-        # Find overlapping entities between batches
-        cross_batch_conflicts = []
-        for i in range(len(batch_entities)):
-            for j in range(i + 1, len(batch_entities)):
-                overlap = batch_entities[i] & batch_entities[j]
-                if overlap:
-                    cross_batch_conflicts.append({
-                        'batch_pair': (i, j),
-                        'conflicting_entities': list(overlap),
-                        'conflict_count': len(overlap)
-                    })
-
-        return {
-            'total_cross_batch_conflicts': len(cross_batch_conflicts),
-            'conflict_details': cross_batch_conflicts,
-            'most_problematic_entities': self._find_most_problematic_entities(cross_batch_conflicts)
-        }
-
-    def _find_most_problematic_entities(self, conflicts):
-        """Find entities that appear in the most cross-batch conflicts"""
-        entity_conflict_count = Counter()
-
-        for conflict in conflicts:
-            for entity in conflict['conflicting_entities']:
-                entity_conflict_count[entity] += 1
-
-        return entity_conflict_count.most_common(10)
-
-    def update_conflict_history(self, entity: str, actual_conflicts: int):
-        """Update historical conflict data for better future predictions"""
-        self.conflict_history[entity] += actual_conflicts
-
 
 class ResourceMonitor:
     """Monitors system resources during algorithm execution"""
@@ -304,6 +185,7 @@ class EvaluationFramework:
                         # Clear database for clean test
                         algorithm.clear_database()
 
+
                         # Run algorithm and collect metrics
                         metrics = algorithm.insert_relationships(relationships)
                         metrics.scenario = scenario
@@ -329,7 +211,7 @@ class EvaluationFramework:
         # Convert dataclasses to dicts for JSON serialization
         results_dict = [asdict(result) for result in self.results]
 
-        results_file = f"{output_dir}/raw_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        results_file = f"{output_dir}raw_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(results_file, 'w') as f:
             json.dump(results_dict, f, indent=2)
 
@@ -348,5 +230,3 @@ def create_evaluation_framework(config_path: str = "config.yaml") -> EvaluationF
         config = yaml.safe_load(f)
 
     return EvaluationFramework(config)
-
-

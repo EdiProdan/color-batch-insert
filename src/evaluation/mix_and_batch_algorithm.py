@@ -6,7 +6,7 @@ from typing import List, Dict, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.evaluation.framework import (
-    PerformanceMetrics, ConflictAnalyzer, ResourceMonitor, AlgorithmBase
+    PerformanceMetrics, ResourceMonitor, AlgorithmBase
 )
 
 
@@ -31,10 +31,7 @@ class MixAndBatchAlgorithm(AlgorithmBase):
         self.batch_size = config.get('batch_size', 1000)
         self.hash_digits = config.get('hash_digits', 1)  # Digits for partition code
 
-        # Enhanced conflict tracking
-        self.conflict_analyzer = ConflictAnalyzer(
-            hub_threshold=config.get('hub_threshold', 5)
-        )
+
 
         print(f"Initialized {self.name} with {self.num_partitions} partitions "
               f"and {self.max_workers} workers")
@@ -221,9 +218,8 @@ class MixAndBatchAlgorithm(AlgorithmBase):
         """Execute batches in parallel using thread pool"""
 
         # Initialize metrics tracking
-        total_predicted_conflicts = 0
-        total_actual_conflicts = 0
-        total_retry_count = 0
+        actual_conflicts = 0
+        retry_count = 0
         conflict_resolution_time = 0
         batch_times = []
         successful_operations = 0
@@ -250,14 +246,10 @@ class MixAndBatchAlgorithm(AlgorithmBase):
 
                     # Aggregate metrics
                     batch_times.append(result['time'])
-                    total_predicted_conflicts += result['predicted_conflicts']
-                    total_actual_conflicts += result['actual_conflicts']
-                    total_retry_count += result['retries']
-                    conflict_resolution_time += result['conflict_time']
-                    successful_operations += result['successful_ops']
-                    total_operations += len(batch)
-                    all_hotspot_entities.extend(result['hotspots'])
+                    actual_conflicts += result['actual_conflicts']
+                    retry_count += result['retry_count']
 
+                    total_operations += len(batch)
                     print(f"  Batch {batch_idx + 1}/{len(batches)} completed in "
                           f"{result['time']:.2f}s (conflicts: {result['actual_conflicts']})")
 
@@ -274,37 +266,32 @@ class MixAndBatchAlgorithm(AlgorithmBase):
         throughput = len(all_relationships) / total_time if total_time > 0 else 0
         success_rate = (successful_operations / total_operations * 100) if total_operations > 0 else 0
 
-        # Calculate conflict prediction accuracy
-        if total_predicted_conflicts > 0:
-            prediction_accuracy = min(100.0, (total_actual_conflicts / total_predicted_conflicts) * 100)
-        else:
-            prediction_accuracy = 100.0 if total_actual_conflicts == 0 else 0.0
-
-        # Get top hotspot entities
-        from collections import Counter
-        hotspot_counter = Counter(all_hotspot_entities)
-        top_hotspots = [entity for entity, _ in hotspot_counter.most_common(5)]
-
         return PerformanceMetrics(
+            # Identity
             algorithm_name=self.name,
             scenario="",  # Set by framework
             run_number=0,  # Set by framework
-            batch_size=len(batches),
+
+            # Core performance
             total_time=total_time,
-            batch_processing_times=batch_times,
-            total_entities=self._count_unique_entities(all_relationships),
-            total_relationships=len(all_relationships),
-            predicted_conflicts=total_predicted_conflicts,
-            actual_conflicts=total_actual_conflicts,
-            conflict_prediction_accuracy=prediction_accuracy,
-            conflict_resolution_time=conflict_resolution_time,
-            retry_count=total_retry_count,
-            hotspot_entities=top_hotspots,
             throughput=throughput,
+            success_rate=success_rate,
+
+            # No intelligence overhead
+            processing_overhead_time=0.0,  # No preprocessing
+            actual_conflicts=actual_conflicts,
+            retry_count=retry_count,
+
+            # Fixed parallelism (no adaptation)
+            adaptation_events=0,  # Never adapts
+            final_parallelism=self.thread_count,  # Fixed
+
+            # Resource usage
             memory_peak=resource_metrics['memory_peak'],
             cpu_avg=resource_metrics['cpu_avg'],
-            success_rate=success_rate,
-            timestamp=datetime.now().isoformat()
+
+            # Batch timing details
+            batch_processing_times=batch_times,
         )
 
     def _process_batch(self, batch: List[Dict], batch_idx: int,
@@ -312,10 +299,6 @@ class MixAndBatchAlgorithm(AlgorithmBase):
         """Process a single batch of relationships"""
 
         start_time = time.time()
-
-        # Predict conflicts before insertion
-        conflict_analysis = self.conflict_analyzer.detect_conflicts_in_batch(batch)
-        predicted_conflicts = conflict_analysis['total_predicted_conflicts']
 
         # Insert relationships
         conflict_start = time.time()
@@ -367,12 +350,10 @@ class MixAndBatchAlgorithm(AlgorithmBase):
 
         return {
             'time': total_time,
-            'predicted_conflicts': predicted_conflicts,
             'actual_conflicts': actual_conflicts,
             'retries': retries,
             'conflict_time': conflict_time,
             'successful_ops': successful_ops,
-            'hotspots': conflict_analysis['conflict_hotspots']
         }
 
     def _count_unique_entities(self, relationships: List[Dict]) -> int:

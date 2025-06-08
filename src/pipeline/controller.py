@@ -1,5 +1,5 @@
 from src.pipeline.text_pipeline import TextPipeline
-from src.evaluation import EvaluationFramework, SimpleSequentialBaseline
+from src.evaluation import EvaluationFramework, SimpleSequentialBaseline, MixAndBatchAlgorithm, SimpleParallelBaseline
 
 
 class PipelineController:
@@ -36,17 +36,17 @@ class PipelineController:
             evaluation_framework = EvaluationFramework(self.config)
 
             # 1. REGISTER SIMPLE BASELINE (Control Group)
-            evaluation_framework.register_algorithm(
-                SimpleSequentialBaseline,
-                self.config['algorithms']['simple_baseline']
-            )
+            # evaluation_framework.register_algorithm(
+            #     SimpleSequentialBaseline,
+            #     self.config['algorithms']['simple_baseline']
+            # )
 
             # 2. REGISTER OTHER BASELINES FOR COMPARISON
             # from src.evaluation import BaselineAlgorithm
-            # evaluation_framework.register_algorithm(
-            #     BaselineAlgorithm,
-            #     self.config['algorithms']['sequential_multi']
-            # )
+            evaluation_framework.register_algorithm(
+                SimpleParallelBaseline,
+                self.config['algorithms']['simple_parallel']
+            )
             #
             # # 3. REGISTER PARALLEL APPROACHES
             # from src.evaluation import WorkingParallelBaseline
