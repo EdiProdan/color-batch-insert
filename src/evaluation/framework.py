@@ -19,31 +19,33 @@ from neo4j import GraphDatabase
 
 @dataclass
 class PerformanceMetrics:
-    """Enhanced container for algorithm performance measurements"""
+    """Minimal metrics for rigorous adaptive algorithm research"""
+
+    # Research identification (essential)
     algorithm_name: str
     scenario: str
     run_number: int
-    batch_size: int
+
+    # Core performance story (your main research claims)
     total_time: float
-    batch_processing_times: List[float]
-    total_entities: int
-    total_relationships: int
+    throughput: float
+    success_rate: float
 
-    # Enhanced conflict metrics
-    predicted_conflicts: int  # Conflicts detected by analysis before insertion
-    actual_conflicts: int  # Real database conflicts encountered
-    conflict_prediction_accuracy: float  # How well we predicted conflicts
-    conflict_resolution_time: float  # Time spent handling conflicts
-    retry_count: int  # Number of retry operations
-    hotspot_entities: List[str]  # Top conflicting entities
+    # Intelligence investment (your innovation)
+    processing_overhead_time: float
+    actual_conflicts: int
+    retry_count: int
 
-    # Performance metrics
-    throughput: float  # relationships/second
-    memory_peak: float  # MB
-    cpu_avg: float  # percentage
-    success_rate: float  # percentage of successful operations
-    timestamp: str
+    # Adaptation evidence (what makes you different)
+    adaptation_events: int  # How many times algorithm adjusted
+    final_parallelism: int  # What it settled on
 
+    # Resource efficiency (scalability story)
+    memory_peak: float
+    cpu_avg: float
+
+    # Analysis depth (optional but valuable)
+    batch_processing_times: List[float]  # Shows learning patterns
 
 class ConflictAnalyzer:
     """
@@ -318,7 +320,6 @@ class EvaluationFramework:
                 continue
 
         self.save_results()
-        self.generate_analysis()
 
     def save_results(self):
         """Save raw results to JSON for detailed analysis"""
@@ -334,42 +335,8 @@ class EvaluationFramework:
 
         print(f"\nResults saved to: {results_file}")
 
-    def generate_analysis(self):
-        """Generate statistical analysis and performance comparison"""
-        if not self.results:
-            print("No results to analyze")
-            return
-
-        print(f"\n{'=' * 80}")
-        print("PERFORMANCE ANALYSIS SUMMARY")
-        print(f"{'=' * 80}")
-
-        # Group results by algorithm and scenario
-        grouped_results = {}
-        for result in self.results:
-            key = (result.algorithm_name, result.scenario)
-            if key not in grouped_results:
-                grouped_results[key] = []
-            grouped_results[key].append(result)
-
-        # Calculate statistics for each group
-        for (algorithm, scenario), results in grouped_results.items():
-            times = [r.total_time for r in results]
-            throughputs = [r.throughput for r in results]
-
-            print(f"\n{algorithm} - {scenario}:")
-            print(f"  Runs: {len(results)}")
-            print(f"  Average Time: {statistics.mean(times):.2f}s (±{statistics.stdev(times):.2f})")
-            print(
-                f"  Average Throughput: {statistics.mean(throughputs):.1f} rel/s (±{statistics.stdev(throughputs):.1f})")
-            print(f"  Best Time: {min(times):.2f}s")
-
-        print(f"\n{'=' * 80}")
-        print("Evaluation completed successfully!")
-        print("Raw data available for detailed statistical analysis")
-
     def close(self):
-        """Clean up resofurces"""
+        """Clean up resources"""
         self.driver.close()
 
 

@@ -1,225 +1,171 @@
-from collections import Counter
 from datetime import datetime
 import time
+from typing import List, Dict
 
-from src.evaluation.framework import PerformanceMetrics, ConflictAnalyzer, ResourceMonitor, AlgorithmBase
+from src.evaluation.framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
 
-class BaselineAlgorithm(AlgorithmBase):
+class SimpleSequentialBaseline(AlgorithmBase):
+    """
+    The simplest possible sequential baseline for thesis research.
+
+    This algorithm represents the most basic approach to relationship insertion:
+    - Fixed batch size
+    - Sequential processing (no parallelism)
+    - No conflict detection or adaptation
+    - No preprocessing or optimization
+
+    This serves as the control group to demonstrate the value of adaptive algorithms.
+    """
+
     def __init__(self, config, driver):
         super().__init__(config, driver)
-        self.batch_sizes = config.get('batch_sizes', [250])
-        self.timeout = config.get('timeout', 300)
-        self.retry_attempts = config.get('retry_attempts', 3)
-        self.conflict_analyzer = ConflictAnalyzer(
-            hub_threshold=config.get('hub_threshold', 5)
-        )
+        self.batch_sizes = config.get('batch_size', [500])  # Single fixed batch size
+        self.name = config.get('name', 'Simple Sequential Baseline')
 
-
-    def insert_relationships(self, relationships):
-        """
-        Enhanced insertion with comprehensive conflict tracking
-        """
-        print(f"\nExecuting {self.name}")
-        print(f"Processing {len(relationships)} relationships")
-
-        best_metrics = None
-        best_time = float('inf')
+    def insert_relationships(self, relationships: List[Dict]) -> List[PerformanceMetrics]:
+        results = []
 
         for batch_size in self.batch_sizes:
-            print(f"  Testing batch size: {batch_size}")
+            print(f"\n--- Testing batch size: {batch_size} ---")
+            result = self._run_single_batch_size(relationships, batch_size)
+            results.append(result)
 
-            self.clear_database()
+        return results
 
-            metrics = self._run_single_batch_size(relationships, batch_size)
+    def _run_single_batch_size(self, relationships: List[Dict], batch_size: int) -> PerformanceMetrics:
 
-            if metrics.total_time < best_time:
-                best_time = metrics.total_time
-                best_metrics = metrics
-
-        return best_metrics
-
-
-    def _run_single_batch_size(self, relationships, batch_size):
-        """Run algorithm with enhanced conflict detection and metrics collection"""
-
+        # Start resource monitoring
         monitor = ResourceMonitor()
         monitor.start_monitoring()
 
+        # Start timing
         start_time = time.time()
-        batch_times = []
 
-        # Initialize conflict tracking
-        total_predicted_conflicts = 0
-        total_actual_conflicts = 0
-        total_retry_count = 0
-        conflict_resolution_time = 0
-        all_hotspot_entities = []
-
-        successful_operations = 0
-        total_operations = 0
-
-        # Create batches
+        # Create simple fixed-size batches
         batches = [relationships[i:i + batch_size]
                    for i in range(0, len(relationships), batch_size)]
 
-        print(f"    Created {len(batches)} batches of size {batch_size}")
+        print(f"Created {len(batches)} batches")
 
-        # Analyze cross-batch conflicts (important for parallel algorithms)
-        cross_batch_analysis = self.conflict_analyzer.analyze_cross_batch_conflicts(batches)
-        print(f"    Cross-batch conflicts detected: {cross_batch_analysis['total_cross_batch_conflicts']}")
+        # Track simple metrics
+        batch_times = []
+        actual_conflicts = 0
+        retry_count = 0
+        successful_operations = 0
 
-        # Process each batch with detailed conflict tracking
+        # Process each batch sequentially
         for batch_idx, batch in enumerate(batches):
             batch_start = time.time()
 
-            # STEP 1: Predict conflicts before insertion
-            conflict_analysis = self.conflict_analyzer.detect_conflicts_in_batch(batch)
-            predicted_conflicts = conflict_analysis['total_predicted_conflicts']
-            total_predicted_conflicts += predicted_conflicts
+            # Insert the batch
+            conflicts, retries, successes = self._insert_batch(batch, batch_idx)
 
-            # Track hotspot entities
-            all_hotspot_entities.extend(conflict_analysis['conflict_hotspots'])
+            # Update metrics
+            actual_conflicts += conflicts
+            retry_count += retries
+            successful_operations += successes
 
-            print(f"    Batch {batch_idx + 1}: Predicted {predicted_conflicts} conflicts")
-            if conflict_analysis['conflict_hotspots']:
-                print(f"      Hotspot entities: {conflict_analysis['conflict_hotspots'][:3]}...")
-
-            # STEP 2: Insert batch and measure actual conflicts
-            conflict_start = time.time()
-            batch_conflicts, retries = 0, 0
-            try:
-                batch_conflicts, retries = self._insert_batch_with_conflict_tracking(batch)
-                total_actual_conflicts += batch_conflicts
-                total_retry_count += retries
-                successful_operations += len(batch)
-
-                # Update conflict history for learning
-                for entity in conflict_analysis['conflict_entities']:
-                    self.conflict_analyzer.update_conflict_history(entity, batch_conflicts)
-
-            except Exception as e:
-                print(f"    Batch {batch_idx + 1} failed: {str(e)[:100]}")
-
-            conflict_resolution_time += time.time() - conflict_start
-            total_operations += len(batch)
-
+            # Record batch time
             batch_time = time.time() - batch_start
             batch_times.append(batch_time)
 
-            print(f"    Batch {batch_idx + 1}/{len(batches)} completed. "
-                  f"Actual conflicts: {batch_conflicts}, Retries: {retries}")
+            # Simple progress reporting
+            if (batch_idx + 1) % 10 == 0 or batch_idx == len(batches) - 1:
+                print(f"  Processed {batch_idx + 1}/{len(batches)} batches")
 
+        # Calculate final metrics
         total_time = time.time() - start_time
-
-        # Stop monitoring and collect resource metrics
         resource_metrics = monitor.stop_monitoring()
 
-        # Calculate enhanced performance metrics
+        # Calculate derived metrics
         throughput = len(relationships) / total_time if total_time > 0 else 0
-        success_rate = (successful_operations / total_operations) * 100
+        success_rate = (successful_operations / len(relationships)) * 100
 
-        # Calculate conflict prediction accuracy
-        if total_predicted_conflicts > 0:
-            prediction_accuracy = min(100.0, (total_actual_conflicts / total_predicted_conflicts) * 100)
-        else:
-            prediction_accuracy = 100.0 if total_actual_conflicts == 0 else 0.0
-
-        # Get top hotspot entities
-        hotspot_counter = Counter(all_hotspot_entities)
-        top_hotspots = [entity for entity, count in hotspot_counter.most_common(5)]
+        print(f"\nCompleted in {total_time:.2f} seconds")
+        print(f"Throughput: {throughput:.1f} relationships/second")
+        print(f"Success rate: {success_rate:.1f}%")
 
         return PerformanceMetrics(
+            # Identity
             algorithm_name=self.name,
-            scenario="",  # Will be set by framework
-            run_number=0,  # Will be set by framework
-            batch_size=batch_size,
+            scenario="",  # Set by framework
+            run_number=0,  # Set by framework
+
+            # Core performance
             total_time=total_time,
-            batch_processing_times=batch_times,
-            total_entities=self._count_unique_entities(relationships),
-            total_relationships=len(relationships),
-            predicted_conflicts=total_predicted_conflicts,
-            actual_conflicts=total_actual_conflicts,
-            conflict_prediction_accuracy=prediction_accuracy,
-            conflict_resolution_time=conflict_resolution_time,
-            retry_count=total_retry_count,
-            hotspot_entities=top_hotspots,
             throughput=throughput,
+            success_rate=success_rate,
+
+            # No intelligence overhead (this is key!)
+            processing_overhead_time=0.0,  # No preprocessing
+            actual_conflicts=actual_conflicts,
+            retry_count=retry_count,
+
+            # No adaptation (static algorithm)
+            adaptation_events=0,  # Never adapts
+            final_parallelism=1,  # Always sequential
+
+            # Resource usage
             memory_peak=resource_metrics['memory_peak'],
             cpu_avg=resource_metrics['cpu_avg'],
-            success_rate=success_rate,
-            timestamp=datetime.now().isoformat()
+
+            # Batch timing details
+            batch_processing_times=batch_times
         )
 
-
-    def _insert_batch_with_conflict_tracking(self, batch):
+    def _insert_batch(self, batch: List[Dict], batch_idx: int) -> tuple:
         """
-        Insert batch with detailed conflict and retry tracking
+        Insert a single batch of relationships.
 
         Returns:
-            Tuple of (actual_conflicts, retry_count)
+            tuple: (conflicts, retries, successful_operations)
         """
-        conflicts_detected = 0
-        retry_count = 0
-        experiment_id = f"exp_{int(time.time() * 1000)}"
+        conflicts = 0
+        retries = 0
+        successes = 0
+        experiment_id = f"baseline_{int(time.time() * 1000)}"
 
         with self.driver.session() as session:
-            for relationship in batch:
-                insertion_successful = False
-                attempt = 0
+            for rel in batch:
+                try:
+                    # Simple MERGE query - no optimization
+                    query = """
+                    MERGE (from:Entity {name: $from_name})
+                    MERGE (to:Entity {name: $to_name})
+                    SET from.experiment_id = $experiment_id,
+                        to.experiment_id = $experiment_id
+                    MERGE (from)-[r:LINKS_TO]->(to)
+                    SET r.similarity = $similarity,
+                        r.involves_hub = $involves_hub,
+                        r.pages_from = $pages_1,
+                        r.pages_to = $pages_2,
+                        r.experiment_id = $experiment_id
+                    """
 
-                while not insertion_successful and attempt < self.retry_attempts:
-                    try:
-                        # Track timing for conflict resolution
-                        attempt_start = time.time()
+                    session.run(query, {
+                        'from_name': rel['from'],
+                        'to_name': rel['to'],
+                        'similarity': rel['similarity'],
+                        'involves_hub': rel['involves_hub'],
+                        'pages_1': rel['pages_1'],
+                        'pages_2': rel['pages_2'],
+                        'experiment_id': experiment_id
+                    })
 
-                        query = """
-                        MERGE (from:Entity {name: $from_name})
-                        MERGE (to:Entity {name: $to_name})
-                        SET from.experiment_id = $experiment_id,
-                            to.experiment_id = $experiment_id
-                        MERGE (from)-[r:LINKS_TO]->(to)
-                        SET r.similarity = $similarity,
-                            r.involves_hub = $involves_hub,
-                            r.pages_from = $pages_1,
-                            r.pages_to = $pages_2,
-                            r.experiment_id = $experiment_id
-                        """
+                    successes += 1
 
-                        session.run(query, {
-                            'from_name': relationship['from'],
-                            'to_name': relationship['to'],
-                            'similarity': relationship['similarity'],
-                            'involves_hub': relationship['involves_hub'],
-                            'pages_1': relationship['pages_1'],
-                            'pages_2': relationship['pages_2'],
-                            'experiment_id': experiment_id
-                        })
+                except Exception as e:
+                    # Simple conflict detection
+                    error_str = str(e).lower()
+                    if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
+                        conflicts += 1
+                    # No retry logic - just fail and continue
 
-                        insertion_successful = True
+        return conflicts, retries, successes
 
-                    except Exception as e:
-                        attempt += 1
-
-                        # Detect different types of conflicts
-                        error_str = str(e).lower()
-                        if any(keyword in error_str for keyword in
-                               ['lock', 'deadlock', 'timeout', 'conflict']):
-                            conflicts_detected += 1
-
-                            if attempt < self.retry_attempts:
-                                retry_count += 1
-                                # Wait before retry (exponential backoff)
-                                time.sleep(0.1 * (2 ** attempt))
-                        else:
-                            # Non-conflict error, don't retry
-                            break
-
-        return conflicts_detected, retry_count
-
-
-    def _count_unique_entities(self, relationships):
-        """Count unique entities in the relationship set"""
+    def _count_unique_entities(self, relationships: List[Dict]) -> int:
+        """Count unique entities in relationships"""
         entities = set()
         for rel in relationships:
             entities.add(rel['from'])
