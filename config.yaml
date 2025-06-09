@@ -45,17 +45,16 @@ algorithms:
     description: "Naive parallel processing"
     batch_size: 100
     thread_count: 10      # Fixed parallelism
-    timeout: 60
+    max_retries: 2            # Maximum retry attempts per failed relationship
 
   # 4. MIX AND BATCH (Published Algorithm)
   mix_and_batch:
     name: "Mix and Batch Parallel Algorithm"
     description: "Published parallel loading approach with conflict-free partitioning"
     num_partitions: 10
-    max_workers: 8
+    max_workers: 10
     batch_size: 1000
     hash_digits: 1
-    hub_threshold: 5
 
   # 5. YOUR ADAPTIVE ALGORITHM (Research Contribution)
   adaptive_dynamic:

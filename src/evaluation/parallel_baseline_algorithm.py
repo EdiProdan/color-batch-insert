@@ -16,7 +16,7 @@ class SimpleParallelBaseline(AlgorithmBase):
     Key simplifications:
     - Fixed batch size, no adaptation
     - Basic round-robin distribution
-    - Minimal retry logic
+    - Simple retry logic with conflict tracking
     - Simple conflict counting
     - No sophisticated error handling
     """
@@ -24,8 +24,8 @@ class SimpleParallelBaseline(AlgorithmBase):
     def __init__(self, config, driver):
         super().__init__(config, driver)
         self.batch_size = config.get('batch_size', 100)
-        self.thread_count = config.get('thread_count', 4)
-        self.max_retries = config.get('max_retries', 2)  # Reduced from complex version
+        self.thread_count = config.get('thread_count', 10)
+        self.max_retries = config.get('max_retries', 2)  # Simple retry count
         self.name = config.get('name', 'Simplified Parallel Baseline')
 
     def insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
@@ -34,7 +34,8 @@ class SimpleParallelBaseline(AlgorithmBase):
         """
         print(f"\n--- Simplified Parallel Baseline ---")
         print(f"Processing {len(relationships)} relationships")
-        print(f"Configuration: {self.thread_count} threads, batch size {self.batch_size}")
+        print(
+            f"Configuration: {self.thread_count} threads, batch size {self.batch_size}, max retries {self.max_retries}")
 
         # Clear previous data
         self.clear_database()
@@ -94,9 +95,9 @@ class SimpleParallelBaseline(AlgorithmBase):
         """
         Create batches with naive random distribution.
 
-        This simulates a real-world scenario where a developer tries to 
+        This simulates a real-world scenario where a developer tries to
         parallelize without understanding the underlying data conflicts.
-        The random shuffling ensures hub entities get distributed across 
+        The random shuffling ensures hub entities get distributed across
         threads, creating realistic conflict patterns.
         """
 
@@ -114,7 +115,7 @@ class SimpleParallelBaseline(AlgorithmBase):
         return batches
 
     def _execute_parallel_batches(self, batches: List[List[Dict]]) -> List[Dict]:
-      
+
         results = []
 
         # Use ThreadPoolExecutor for genuine parallel execution
@@ -148,12 +149,12 @@ class SimpleParallelBaseline(AlgorithmBase):
 
         batch_start = time.time()
 
-        # Use your exact _insert_batch logic
-        conflicts, retries, successful = self._insert_batch(batch, batch_id)
+        # Use your exact _insert_batch logic WITH RETRIES
+        conflicts, retries, successful = self._insert_batch_with_retry(batch, batch_id)
 
         processing_time = time.time() - batch_start
 
-        print(f"    Thread {batch_id}: {successful}/{len(batch)} successful, {conflicts} conflicts")
+        print(f"    Thread {batch_id}: {successful}/{len(batch)} successful, {conflicts} conflicts, {retries} retries")
 
         return {
             'successful': successful,
@@ -162,49 +163,73 @@ class SimpleParallelBaseline(AlgorithmBase):
             'time': processing_time
         }
 
-    def _insert_batch(self, batch: List[Dict], batch_idx: int) -> tuple:
-
-        conflicts = 0
-        retries = 0
+    def _insert_batch_with_retry(self, batch: List[Dict], batch_idx: int) -> tuple:
+        """
+        Insert a batch with simple retry logic.
+        IMPORTANT: We count ALL conflicts, even if retry succeeds!
+        """
+        total_conflicts = 0
+        total_retries = 0
         successes = 0
         experiment_id = f"parallel_baseline_{batch_idx}_{int(time.time() * 1000)}"
 
         with self.driver.session() as session:
             for rel in batch:
-                try:
-                    query = """
-                    MERGE (from:Entity {name: $from_name})
-                    MERGE (to:Entity {name: $to_name})
-                    SET from.experiment_id = $experiment_id,
-                        to.experiment_id = $experiment_id
-                    MERGE (from)-[r:LINKS_TO]->(to)
-                    SET r.similarity = $similarity,
-                        r.involves_hub = $involves_hub,
-                        r.pages_from = $pages_1,
-                        r.pages_to = $pages_2,
-                        r.experiment_id = $experiment_id
-                    """
+                retry_count = 0
+                succeeded = False
 
-                    session.run(query, {
-                        'from_name': rel['from'],
-                        'to_name': rel['to'],
-                        'similarity': rel['similarity'],
-                        'involves_hub': rel['involves_hub'],
-                        'pages_1': rel['pages_1'],
-                        'pages_2': rel['pages_2'],
-                        'experiment_id': experiment_id
-                    })
+                # Try up to max_retries + 1 times (initial attempt + retries)
+                while retry_count <= self.max_retries and not succeeded:
+                    try:
+                        query = """
+                        MERGE (from:Entity {name: $from_name})
+                        MERGE (to:Entity {name: $to_name})
+                        SET from.experiment_id = $experiment_id,
+                            to.experiment_id = $experiment_id
+                        MERGE (from)-[r:LINKS_TO]->(to)
+                        SET r.similarity = $similarity,
+                            r.involves_hub = $involves_hub,
+                            r.pages_from = $pages_1,
+                            r.pages_to = $pages_2,
+                            r.experiment_id = $experiment_id
+                        """
 
-                    successes += 1
+                        session.run(query, {
+                            'from_name': rel['from'],
+                            'to_name': rel['to'],
+                            'similarity': rel['similarity'],
+                            'involves_hub': rel['involves_hub'],
+                            'pages_1': rel['pages_1'],
+                            'pages_2': rel['pages_2'],
+                            'experiment_id': experiment_id
+                        })
 
-                except Exception as e:
-                    # Your exact conflict detection logic
-                    error_str = str(e).lower()
-                    if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
-                        conflicts += 1
-                        print("Conflict")
+                        succeeded = True
+                        successes += 1
 
+                    except Exception as e:
+                        # Your exact conflict detection logic
+                        error_str = str(e).lower()
+                        if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
+                            # THIS IS KEY: We ALWAYS count the conflict
+                            total_conflicts += 1
 
-        return conflicts, retries, successes
+                            if retry_count < self.max_retries:
+                                # We're going to retry
+                                retry_count += 1
+                                total_retries += 1
 
-    #TODO: maybe add some retries, but later is fine
+                                # Simple exponential backoff
+                                wait_time = 0.1 * (2 ** retry_count)
+                                time.sleep(wait_time)
+
+                                print(
+                                    f"      Conflict detected, retry {retry_count}/{self.max_retries} after {wait_time:.2f}s")
+                            else:
+                                # No more retries left
+                                break
+                        else:
+                            # Non-conflict error, don't retry
+                            break
+
+        return total_conflicts, total_retries, successes
