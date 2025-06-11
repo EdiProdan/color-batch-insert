@@ -1,383 +1,334 @@
-"""
-Semantic Analyzer for Knowledge Graph Construction
-Classifies entities and predicts conflicts based on semantic patterns
-"""
-import json
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Set, Tuple
 from collections import defaultdict, Counter
+import time
 
 
 class SemanticAnalyzer:
     """
-    Analyzes entities from Wikipedia-based knowledge graphs to:
-    1. Classify entity types based on patterns and context
-    2. Predict conflict probability between entity pairs
-    3. Provide semantic grouping recommendations
+    Simple semantic analyzer for knowledge graph relationship processing.
+
+    Provides situational awareness by analyzing:
+    1. Current database state (existing entity load)
+    2. Incoming relationship patterns (semantic types, frequency)
+    3. Conflict risk assessment (overlap between busy entities and incoming data)
+
+    This preprocessing enables intelligent batching decisions.
     """
 
-    def __init__(self):
-        # Define type patterns based on Wikipedia entities
+    def __init__(self, driver):
+        self.driver = driver
+
+        # Define semantic type patterns based on Wikipedia entities
         self.type_patterns = {
             'identifier': {
                 'exact': ['isbn', 'issn', 'imdb', 'doi', 'pmid', 'oclc'],
                 'contains': ['identifier', 'id', 'code', 'number'],
-                'priority': 10  # Highest priority
             },
             'geographic': {
                 'exact': ['united states', 'united kingdom', 'germany', 'france',
                           'china', 'japan', 'india', 'brazil', 'canada', 'australia',
                           'london', 'paris', 'new york', 'tokyo', 'berlin', 'boston',
-                          'philadelphia', 'chicago', 'los angeles', 'madrid', 'rome'],
+                          'philadelphia', 'chicago', 'los angeles', 'madrid', 'rome', 'virginia', 'washington'],
                 'contains': ['city', 'country', 'state', 'province', 'region',
-                            'continent', 'ocean', 'river', 'mountain', 'island',
-                            'massachusetts', 'california', 'texas', 'florida', 'ohio'],
+                             'continent', 'ocean', 'river', 'mountain', 'island',
+                             'massachusetts', 'california', 'texas', 'florida', 'ohio'],
                 'suffixes': ['burg', 'stadt', 'shire', 'land', 'ville', 'ton', 'ford'],
-                'priority': 8
             },
             'person': {
                 'exact': [],
                 'contains': ['author', 'writer', 'director', 'actor', 'actress',
-                            'scientist', 'professor', 'president', 'minister',
-                            'artist', 'musician', 'singer', 'player', 'einstein',
-                            'newton', 'curie', 'shakespeare', 'beethoven'],
+                             'scientist', 'professor', 'president', 'minister',
+                             'artist', 'musician', 'singer', 'player', 'einstein',
+                             'newton', 'curie', 'shakespeare', 'beethoven'],
                 'patterns': ['born', 'died'],  # From page context
                 'suffixes': [],  # Names don't have consistent suffixes
-                'priority': 7
             },
             'organization': {
                 'exact': ['united nations', 'european union', 'nato', 'who'],
                 'contains': ['university', 'college', 'institute', 'company',
-                            'corporation', 'agency', 'department', 'ministry',
-                            'police', 'military', 'army', 'navy', 'force'],
+                             'corporation', 'agency', 'department', 'ministry',
+                             'police', 'military', 'army', 'navy', 'force'],
                 'suffixes': ['inc', 'corp', 'ltd', 'gmbh', 'org'],
-                'priority': 6
             },
             'creative_work': {
                 'exact': [],
                 'contains': ['film', 'movie', 'book', 'novel', 'album', 'song',
-                            'series', 'show', 'documentary', 'magazine', 'journal'],
+                             'series', 'show', 'documentary', 'magazine', 'journal'],
                 'patterns': ['published', 'released', 'premiered'],
-                'priority': 5
             },
             'event': {
                 'exact': [],
                 'contains': ['war', 'battle', 'revolution', 'election', 'olympics',
-                            'conference', 'summit', 'festival', 'ceremony',
-                            'attack', 'disaster', 'crisis', 'pandemic'],
+                             'conference', 'summit', 'festival', 'ceremony',
+                             'attack', 'disaster', 'crisis', 'pandemic'],
                 'patterns': ['occurred', 'happened', 'took place'],
-                'priority': 4
             },
             'concept': {
                 'exact': [],
                 'contains': ['theory', 'law', 'principle', 'philosophy', 'religion',
-                            'language', 'culture', 'science', 'technology', 'system',
-                            'mechanics', 'physics', 'chemistry', 'biology', 'mathematics'],
-                'priority': 3
+                             'language', 'culture', 'science', 'technology', 'system',
+                             'mechanics', 'physics', 'chemistry', 'biology', 'mathematics', 'climate', 'environment'],
             },
             'temporal': {
                 'exact': [],
                 'contains': ['century', 'decade', 'year', 'month', 'period', 'era'],
-                'patterns': ['january', 'february', 'monday', 'tuesday'],
-                'priority': 2
-            }
+                'patterns': ['january', 'february', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+                             'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'
+                             ],
+            },
+            'media': {
+                'exact': ['the new york times', 'the guardian', 'bbc', 'cnn'],
+                'contains': ['news', 'media', 'press', 'journal', 'magazine']
+            },
+            'academic': {
+                'contains': ['professor', 'research', 'study', 'journal'],
+                'suffixes': ['phd', 'md', 'research']
+            },
+
         }
 
-        # Known high-conflict entities from your research
+    def analyze_preprocessing_context(self, relationships: List[Dict]) -> Dict:
+        print("🔍 Starting semantic preprocessing analysis...")
+        analysis_start = time.time()
 
-        # Initialize conflict learning
-        self.observed_conflicts = defaultdict(int)
-        self.type_pair_conflicts = defaultdict(int)
-        self.type_pair_attempts = defaultdict(int)
+        # Part 1: Analyze current database state
+        print("  📊 Analyzing current database state...")
+        database_state = self._analyze_database_state()
 
-    def classify_entity(self, entity_name: str, page_title: str = None,
-                       page_content: str = None) -> Tuple[str, float]:
+        # Part 2: Analyze incoming relationships
+        print("  📋 Analyzing incoming relationships...")
+        incoming_analysis = self._analyze_incoming_relationships(relationships)
+
+        # Part 3: Assess conflict risks
+        print("  ⚠️  Assessing conflict risks...")
+        conflict_assessment = self._assess_conflict_risks(database_state, incoming_analysis)
+
+        analysis_time = time.time() - analysis_start
+        print(f"  ✅ Preprocessing completed in {analysis_time:.2f} seconds")
+
+        return {
+            'database_state': database_state,
+            'incoming_analysis': incoming_analysis,
+            'conflict_assessment': conflict_assessment,
+            'preprocessing_time': analysis_time
+        }
+
+    def _analyze_database_state(self) -> Dict:
+        """Analyze current database to understand existing entity load."""
+        try:
+            with self.driver.session() as session:
+                # Get entity degree distribution
+                result = session.run("""
+                    MATCH (n:Entity)
+                    WHERE n.title IS NOT NULL
+                    OPTIONAL MATCH (n)-[r]-()
+                    WITH n, count(r) as degree
+                    RETURN n.title as entity_title, degree
+                    ORDER BY degree DESC
+                    LIMIT 20
+                """)
+
+                high_degree_entities = []
+                for record in result:
+                    entity_title = record['entity_title']
+                    if entity_title is not None:  # Additional safety check
+                        high_degree_entities.append({
+                            'name': entity_title,  # Keep as 'name' for consistency in the rest of the code
+                            'degree': record['degree']
+                        })
+
+                # Get basic database stats - also filter null titles
+                stats_result = session.run("""
+                    MATCH (n:Entity)
+                    WHERE n.title IS NOT NULL
+                    OPTIONAL MATCH (n)-[r:LINKS_TO]-()
+                    RETURN count(DISTINCT n) as total_entities, count(r) as total_relationships
+                """)
+
+                stats = stats_result.single()
+
+                return {
+                    'high_degree_entities': high_degree_entities,
+                    'total_entities': stats['total_entities'] if stats else 0,
+                    'total_relationships': stats['total_relationships'] if stats else 0,
+                    'top_entities': [e['name'] for e in high_degree_entities[:10] if e['name'] is not None]
+                }
+
+        except Exception as e:
+            print(f"    Warning: Database analysis failed: {e}")
+            return {
+                'high_degree_entities': [],
+                'total_entities': 0,
+                'total_relationships': 0,
+                'top_entities': []
+            }
+
+    def _analyze_incoming_relationships(self, relationships: List[Dict]) -> Dict:
+        """Analyze semantic patterns in incoming relationship data."""
+        # Extract all unique entities from relationships
+        all_entities = set()
+        entity_frequency = Counter()
+
+        for rel in relationships:
+            # Add null safety for relationship data
+            from_entity = rel.get('from', '').strip() if rel.get('from') else ''
+            to_entity = rel.get('to', '').strip() if rel.get('to') else ''
+
+            # Skip empty or null entities
+            if from_entity:
+                from_entity_lower = from_entity.lower()
+                all_entities.add(from_entity_lower)
+                entity_frequency[from_entity_lower] += 1
+
+            if to_entity:
+                to_entity_lower = to_entity.lower()
+                all_entities.add(to_entity_lower)
+                entity_frequency[to_entity_lower] += 1
+
+        # Classify entities by semantic type
+        entity_classifications = {}
+        type_counts = Counter()
+
+        for entity in all_entities:
+            semantic_type = self._classify_entity(entity)
+            entity_classifications[entity] = semantic_type
+            type_counts[semantic_type] += 1
+
+        # Find frequent entities in incoming data (potential internal conflicts)
+        frequent_entities = [(entity, count) for entity, count in entity_frequency.most_common(10)]
+
+        return {
+            'total_unique_entities': len(all_entities),
+            'entity_classifications': entity_classifications,
+            'type_distribution': dict(type_counts),
+            'frequent_incoming_entities': frequent_entities,
+            'classification_coverage': (len(all_entities) - type_counts['unknown']) / len(
+                all_entities) if all_entities else 0
+        }
+
+    def _classify_entity(self, entity_name: str) -> str:
         """
-        Classify an entity based on its name and context.
-        Returns: (entity_type, confidence_score)
+        Classify an entity into semantic types using pattern matching.
+
+        Returns: One of 'identifier', 'geographic', 'person', 'organization', 'concept', 'unknown'
         """
         entity_lower = entity_name.lower().strip()
 
-        # Special handling for known database hubs first
+        # Check each semantic type
+        for semantic_type, patterns in self.type_patterns.items():
+            # Check exact matches
+            if 'exact' in patterns and entity_lower in patterns['exact']:
+                return semantic_type
 
-        # Check each type by priority
-        best_type = 'general'
-        best_score = 0.0
+            # Check contains patterns
+            if 'contains' in patterns:
+                for pattern in patterns['contains']:
+                    if pattern in entity_lower:
+                        return semantic_type
 
-        for entity_type, patterns in self.type_patterns.items():
-            score = 0.0
+            # Check suffix patterns
+            if 'suffixes' in patterns:
+                for suffix in patterns['suffixes']:
+                    if entity_lower.endswith(suffix):
+                        return semantic_type
 
-            # Exact match check
-            if entity_lower in patterns.get('exact', []):
-                score = 1.0
+        return 'unknown'
 
-            # Contains check
-            for pattern in patterns.get('contains', []):
-                if pattern in entity_lower:
-                    score = max(score, 0.8)
-                    break
-
-            # Suffix check
-            for suffix in patterns.get('suffixes', []):
-                if entity_lower.endswith(suffix):
-                    score = max(score, 0.7)
-                    break
-
-            # Context from page title
-            if page_title:
-                title_lower = page_title.lower()
-                for pattern in patterns.get('contains', []):
-                    if pattern in title_lower:
-                        score = max(score, 0.6)
-                        break
-
-                # Check patterns in title
-                for pattern in patterns.get('patterns', []):
-                    if pattern in title_lower:
-                        score = max(score, 0.5)
-                        break
-
-            # Apply priority weighting
-            weighted_score = score * (patterns['priority'] / 10.0)
-
-            if weighted_score > best_score:
-                best_score = weighted_score
-                best_type = entity_type
-
-        # Special handling for known entities
-
-        return best_type, best_score
-
-    def predict_conflict_probability(self, entity1: str, entity2: str,
-                                    entity1_type: str = None, entity2_type: str = None,
-                                    entity1_degree: int = 0, entity2_degree: int = 0,
-                                    involves_hub: bool = False) -> float:
+    def _assess_conflict_risks(self, database_state: Dict, incoming_analysis: Dict) -> Dict:
         """
-        Predict the probability of conflict when processing these entities together.
+        Assess potential conflicts between database state and incoming data.
+
+        This is where your semantic intelligence identifies risk patterns.
         """
-        # Get types if not provided
-        if not entity1_type:
-            entity1_type, _ = self.classify_entity(entity1)
-        if not entity2_type:
-            entity2_type, _ = self.classify_entity(entity2)
+        # Find overlap between high-degree database entities and incoming entities
+        # Add safety for None values
+        database_busy_entities = set()
+        for entity_info in database_state['high_degree_entities']:
+            if entity_info.get('name') is not None:
+                database_busy_entities.add(entity_info['name'].lower())
 
-        # Check if either is a known hub
-        entity1_lower = entity1.lower().strip()
-        entity2_lower = entity2.lower().strip()
+        incoming_entities = set(incoming_analysis['entity_classifications'].keys())
 
+        high_risk_entities = database_busy_entities.intersection(incoming_entities)
 
-        # Type-based conflict rules
-        conflict_matrix = {
-            ('identifier', 'identifier'): 0.8,
-            ('identifier', 'any'): 0.7,
-            ('geographic', 'geographic'): 0.3,
-            ('person', 'person'): 0.4,
-            ('organization', 'organization'): 0.4,
-            ('creative_work', 'creative_work'): 0.3,
-            ('event', 'event'): 0.2,
-            ('concept', 'concept'): 0.2,
-            ('temporal', 'temporal'): 0.1,
-            ('different_types'): 0.15  # Default for different types
+        # Assess semantic type conflict patterns
+        type_conflict_risks = self._calculate_type_conflict_risks(incoming_analysis['type_distribution'])
+
+        # Entity-level risk assessment
+        entity_risks = {}
+        for entity, classification in incoming_analysis['entity_classifications'].items():
+            risk_score = 0.0
+
+            # Higher risk if entity is already busy in database
+            if entity in database_busy_entities:
+                risk_score += 0.6
+
+            # Higher risk for identifier types (often hubs)
+            if classification == 'identifier':
+                risk_score += 0.3
+
+            # Higher risk for frequent entities in incoming data
+            frequent_entities = dict(incoming_analysis['frequent_incoming_entities'])
+            if entity in frequent_entities and frequent_entities[entity] > 5:
+                risk_score += 0.2
+
+            entity_risks[entity] = min(risk_score, 1.0)  # Cap at 1.0
+
+        return {
+            'high_risk_entities': list(high_risk_entities),
+            'type_conflict_risks': type_conflict_risks,
+            'entity_risk_scores': entity_risks,
+            'risk_summary': {
+                'total_high_risk': len([e for e, risk in entity_risks.items() if risk > 0.5]),
+                'overlap_with_database': len(high_risk_entities)
+            }
         }
 
-        # Look up conflict probability
-        type_pair = (entity1_type, entity2_type)
-        reverse_pair = (entity2_type, entity1_type)
+    def _calculate_type_conflict_risks(self, type_distribution: Dict) -> Dict:
+        """Calculate conflict risk for each semantic type based on simple heuristics."""
+        type_risks = {}
 
-        if type_pair in conflict_matrix:
-            base_prob = conflict_matrix[type_pair]
-        elif reverse_pair in conflict_matrix:
-            base_prob = conflict_matrix[reverse_pair]
-        elif entity1_type == entity2_type:
-            base_prob = 0.25  # Same type default
-        else:
-            base_prob = conflict_matrix['different_types']
-
-        # Adjust for degree (hub detection)
-        if entity1_degree > 100 or entity2_degree > 100:
-            base_prob = min(base_prob + 0.3, 0.95)
-        elif entity1_degree > 50 or entity2_degree > 50:
-            base_prob = min(base_prob + 0.15, 0.95)
-
-        # Explicit hub flag
-        if involves_hub:
-            base_prob = max(base_prob, 0.6)
-
-        # Learn from observed conflicts (if available)
-        type_key = f"{min(entity1_type, entity2_type)}-{max(entity1_type, entity2_type)}"
-        if self.type_pair_attempts[type_key] > 10:  # Enough observations
-            observed_rate = self.type_pair_conflicts[type_key] / self.type_pair_attempts[type_key]
-            # Blend predicted and observed (weighted average)
-            base_prob = 0.7 * base_prob + 0.3 * observed_rate
-
-        return min(max(base_prob, 0.0), 1.0)  # Ensure between 0 and 1
-
-    def enrich_relationships(self, relationships: List[Dict],
-                           processed_pages: List[Dict] = None) -> List[Dict]:
-        """
-        Add semantic information to relationships.
-        """
-        # Build entity -> page mapping if pages provided
-        entity_to_page = {}
-        if processed_pages:
-            for page in processed_pages:
-                page_title = page.get('title', '')
-                for entity in page.get('entities', []):
-                    entity_to_page[entity['name']] = page_title
-
-        enriched = []
-        type_distribution = Counter()
-        type_pair_distribution = Counter()
-
-        for rel in relationships:
-            # Get entity types
-            from_name = rel['from']
-            to_name = rel['to']
-
-            from_page = entity_to_page.get(from_name, '')
-            to_page = entity_to_page.get(to_name, '')
-
-            from_type, from_conf = self.classify_entity(from_name, from_page)
-            to_type, to_conf = self.classify_entity(to_name, to_page)
-
-            # Count for statistics
-            type_distribution[from_type] += 1
-            type_distribution[to_type] += 1
-            type_pair = f"{from_type}-{to_type}"
-            type_pair_distribution[type_pair] += 1
-
-            # Create enriched relationship
-            enriched_rel = rel.copy()
-            enriched_rel['from_type'] = from_type
-            enriched_rel['to_type'] = to_type
-            enriched_rel['from_type_confidence'] = from_conf
-            enriched_rel['to_type_confidence'] = to_conf
-            enriched_rel['type_pair'] = type_pair
-
-            # Predict conflict
-            enriched_rel['predicted_conflict'] = self.predict_conflict_probability(
-                from_name, to_name,
-                from_type, to_type,
-                entity1_degree=len(rel.get('pages_1', [])),
-                entity2_degree=len(rel.get('pages_2', [])),
-                involves_hub=rel.get('involves_hub', False)
-            )
-
-            enriched.append(enriched_rel)
-
-        return enriched, type_distribution, type_pair_distribution
-
-    def update_conflict_observations(self, entity1_type: str, entity2_type: str,
-                                   had_conflict: bool):
-        """
-        Update conflict statistics based on observed behavior.
-        """
-        type_key = f"{min(entity1_type, entity2_type)}-{max(entity1_type, entity2_type)}"
-        self.type_pair_attempts[type_key] += 1
-        if had_conflict:
-            self.type_pair_conflicts[type_key] += 1
-
-    def analyze_hub_types(self, relationships: List[Dict],
-                         processed_pages: List[Dict] = None) -> Dict:
-        """
-        Distinguish between topical hubs (frequent in pages) and
-        structural hubs (frequent in database connections).
-        """
-        # Count entity frequencies in relationships (database connections)
-        db_frequency = Counter()
-        for rel in relationships:
-            db_frequency[rel['from']] += 1
-            db_frequency[rel['to']] += 1
-
-        # Count entity frequencies in pages (topical mentions)
-        page_frequency = Counter()
-        if processed_pages:
-            for page in processed_pages:
-                for entity in page.get('entities', []):
-                    page_frequency[entity['name']] += 1
-
-        # Classify hubs
-        hub_analysis = {
-            'structural_hubs': [],  # High DB frequency, low page frequency
-            'topical_hubs': [],     # High page frequency
-            'universal_hubs': [],   # High in both
-            'regular_entities': []  # Low in both
+        # Simple heuristic model for conflict prediction
+        risk_weights = {
+            'identifier': 0.8,  # High risk - often hubs
+            'geographic': 0.4,  # Medium risk - some popular places
+            'organization': 0.5,  # Medium risk - universities can be hubs
+            'person': 0.3,  # Lower risk - usually not major hubs
+            'concept': 0.4,  # Medium risk - some popular concepts
+            'unknown': 0.2  # Low risk - hard to predict
         }
 
-        # Get all unique entities
-        all_entities = set(db_frequency.keys()) | set(page_frequency.keys())
+        for semantic_type, count in type_distribution.items():
+            base_risk = risk_weights.get(semantic_type, 0.2)
+            # Increase risk if many entities of this type
+            volume_multiplier = min(1.0 + (count / 100), 2.0)  # Cap multiplier
+            type_risks[semantic_type] = min(base_risk * volume_multiplier, 1.0)
 
-        for entity in all_entities:
-            db_freq = db_frequency.get(entity, 0)
-            page_freq = page_frequency.get(entity, 0)
+        return type_risks
 
-            # Classify based on frequencies (adjust thresholds as needed)
-            if db_freq > 50 and page_freq < 10:
-                hub_analysis['structural_hubs'].append({
-                    'entity': entity,
-                    'db_frequency': db_freq,
-                    'page_frequency': page_freq,
-                    'type': self.classify_entity(entity)[0]
-                })
-            elif page_freq > 20 and db_freq < 10:
-                hub_analysis['topical_hubs'].append({
-                    'entity': entity,
-                    'db_frequency': db_freq,
-                    'page_frequency': page_freq,
-                    'type': self.classify_entity(entity)[0]
-                })
-            elif db_freq > 50 and page_freq > 20:
-                hub_analysis['universal_hubs'].append({
-                    'entity': entity,
-                    'db_frequency': db_freq,
-                    'page_frequency': page_freq,
-                    'type': self.classify_entity(entity)[0]
-                })
+    def print_analysis_summary(self, analysis_context: Dict):
+        """Print a human-readable summary of the analysis for debugging/research."""
+        db_state = analysis_context['database_state']
+        incoming = analysis_context['incoming_analysis']
+        conflicts = analysis_context['conflict_assessment']
 
-        # Sort by frequency
-        for hub_type in ['structural_hubs', 'topical_hubs', 'universal_hubs']:
-            hub_analysis[hub_type].sort(
-                key=lambda x: x['db_frequency'] + x['page_frequency'],
-                reverse=True
-            )
+        print(f"\n📈 SEMANTIC ANALYSIS SUMMARY")
+        print(f"{'=' * 50}")
 
-        return hub_analysis
+        print(f"\n🏗️  Database State:")
+        print(f"  Total entities: {db_state['total_entities']}")
+        print(f"  Total relationships: {db_state['total_relationships']}")
+        print(f"  Top busy entities: {', '.join(db_state['top_entities'][:5])}")
 
+        print(f"\n📦 Incoming Data:")
+        print(f"  Unique entities to process: {incoming['total_unique_entities']}")
+        print(f"  Classification coverage: {incoming['classification_coverage']:.1%}")
+        print(f"  Type distribution: {incoming['type_distribution']}")
 
-    def get_semantic_statistics(self, enriched_relationships):
-        """
-        Calculate statistics about the semantic distribution.
-        """
-        stats = {
-            'total_relationships': len(enriched_relationships),
-            'type_distribution': Counter(),
-            'type_pair_distribution': Counter(),
-            'conflict_predictions': {
-                'high': 0,  # > 0.7
-                'medium': 0,  # 0.3 - 0.7
-                'low': 0  # < 0.3
-            },
-            'average_conflict_probability': 0.0
-        }
+        print(f"\n⚠️  Conflict Assessment:")
+        print(f"  High-risk entities: {conflicts['risk_summary']['total_high_risk']}")
+        print(f"  Database overlap: {conflicts['risk_summary']['overlap_with_database']}")
+        print(
+            f"  Riskiest types: {sorted(conflicts['type_conflict_risks'].items(), key=lambda x: x[1], reverse=True)[:3]}")
 
-        total_conflict_prob = 0.0
-
-        for rel in enriched_relationships:
-            # Type distribution
-            stats['type_distribution'][rel['from_type']] += 1
-            stats['type_distribution'][rel['to_type']] += 1
-            stats['type_pair_distribution'][rel['type_pair']] += 1
-
-            # Conflict prediction distribution
-            conf_prob = rel['predicted_conflict']
-            total_conflict_prob += conf_prob
-
-            if conf_prob > 0.7:
-                stats['conflict_predictions']['high'] += 1
-            elif conf_prob >= 0.3:
-                stats['conflict_predictions']['medium'] += 1
-            else:
-                stats['conflict_predictions']['low'] += 1
-
-        stats['average_conflict_probability'] = total_conflict_prob / len(enriched_relationships)
-
-        return stats
+        print(f"\n⏱️  Preprocessing time: {analysis_context['preprocessing_time']:.2f}s")
