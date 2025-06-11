@@ -12,7 +12,7 @@ evaluation:
     #scenarios: ["high-precision", "moderate-connectivity", "comprehensive"]
 #    scenarios: ["dev_a_precision", "dev_b_balanced", "dev_c_diverse"]
     scenarios: ["dev_a_precision"]
-    runs_per_algorithm: 5
+    runs_per_algorithm: 10
     metrics:
       - "total_time"
       - "batch_processing_time"
@@ -71,9 +71,9 @@ algorithms:
     learning_window: 5        # Batches to consider for adaptation
 
     # Parallelism control
-    initial_parallelism: 4
+    initial_parallelism: 10
     min_parallelism: 1
-    max_parallelism: 8
+    max_parallelism: 10
 
     # Conflict prediction
     hub_threshold: 5
