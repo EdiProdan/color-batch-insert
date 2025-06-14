@@ -1,6 +1,7 @@
 import concurrent.futures
 import random
 import time
+from collections import defaultdict
 from typing import List, Dict
 
 from src.evaluation.framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
@@ -23,9 +24,9 @@ class SimpleParallelBaseline(AlgorithmBase):
 
     def __init__(self, config, driver):
         super().__init__(config, driver)
-        self.batch_size = config.get('batch_size', 100)
+        self.batch_size = config.get('batch_size', 50)
         self.thread_count = config.get('thread_count', 10)
-        self.max_retries = config.get('max_retries', 2)  # Simple retry count
+        self.max_retries = config.get('max_retries', 3)  # Simple retry count
         self.name = config.get('name', 'Simplified Parallel Baseline')
 
     def insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
@@ -93,26 +94,60 @@ class SimpleParallelBaseline(AlgorithmBase):
 
     def _create_simple_batches(self, relationships: List[Dict]) -> List[List[Dict]]:
         """
-        Create batches with naive random distribution.
+        Creates batches optimized for conflict generation in parallel processing.
 
-        This simulates a real-world scenario where a developer tries to
-        parallelize without understanding the underlying data conflicts.
-        The random shuffling ensures hub entities get distributed across
-        threads, creating realistic conflict patterns.
+        Args:
+            relationships: List of relationship dictionaries
+            batch_size: Target size for each batch
+            workers: Number of parallel workers (used for conflict optimization)
+            conflict_mode: If True, groups relationships by 'from' node to force conflicts
+
+        Returns:
+            List of batches (each batch is a list of relationships)
         """
+        # Group relationships by 'from' node
+        groups = defaultdict(list)
+        for rel in relationships:
+            groups[rel['from']].append(rel)
 
-        # Shuffle relationships randomly to break up sequential patterns
-        shuffled_relationships = relationships.copy()
-        random.shuffle(shuffled_relationships)
-
-        # Create batches from shuffled data
+        # Create batches within each group
         batches = []
-        for i in range(0, len(shuffled_relationships), self.batch_size):
-            batch = shuffled_relationships[i:i + self.batch_size]
-            batches.append(batch)
+        for node, rels in groups.items():
+            # Split group into chunks
+            for i in range(0, len(rels), self.batch_size):
+                batch = rels[i:i + self.batch_size]
+                batches.append((node, batch))  # Store node info for debugging
 
-        print(f"  Random batching created {len(batches)} batches")
-        return batches
+        # Sort by group size descending (prioritize large groups)
+        batches.sort(key=lambda x: len(x[1]), reverse=True)
+
+        # Interleave batches from different groups to maximize parallel conflicts
+        final_batches = []
+        group_rotation = []
+
+        # Create a round-robin schedule of groups
+        unique_groups = list({batch[0] for batch in batches})
+        for _ in range(self.thread_count):
+            random.shuffle(unique_groups)
+            group_rotation.extend(unique_groups)
+
+        # Assign batches to the rotation schedule
+        batch_dict = defaultdict(list)
+        for node, batch in batches:
+            batch_dict[node].append(batch)
+
+        for group in group_rotation:
+            if batch_dict[group]:
+                final_batches.append(batch_dict[group].pop(0))
+
+        # Add remaining batches
+        for node in batch_dict:
+            final_batches.extend(batch_dict[node])
+
+        print(f"Created {len(final_batches)} batches with focus on {len(unique_groups)} groups")
+        print(f"Top contention groups: {unique_groups[:5]}...")
+
+        return final_batches
 
     def _execute_parallel_batches(self, batches: List[List[Dict]]) -> List[Dict]:
 
@@ -132,9 +167,9 @@ class SimpleParallelBaseline(AlgorithmBase):
                 try:
                     result = future.result(timeout=60)  # Simple timeout
                     results.append(result)
-                    print(f"  Batch {batch_id} completed: {result['successful']}/{len(batches[batch_id])} successful")
+                    #print(f"  Batch {batch_id} completed: {result['successful']}/{len(batches[batch_id])} successful")
                 except Exception as e:
-                    print(f"  Batch {batch_id} failed: {str(e)[:50]}")
+                    #print(f"  Batch {batch_id} failed: {str(e)[:50]}")
                     # Record failed batch
                     results.append({
                         'successful': 0,
@@ -182,26 +217,22 @@ class SimpleParallelBaseline(AlgorithmBase):
                 while retry_count <= self.max_retries and not succeeded:
                     try:
                         query = """
-                        MERGE (from:Entity {name: $from_name})
-                        MERGE (to:Entity {name: $to_name})
-                        SET from.experiment_id = $experiment_id,
-                            to.experiment_id = $experiment_id
+                        MERGE (from:Entity {title: $from})
+                        ON CREATE SET from.isBase = true
+                        ON MATCH SET from.isBase = COALESCE(from.isBase, true)
+
+                        MERGE (to:Entity {title: $to})
+                        ON CREATE SET to.isBase = $isBase
+                        ON MATCH SET to.isBase = $isBase
+
                         MERGE (from)-[r:LINKS_TO]->(to)
-                        SET r.similarity = $similarity,
-                            r.involves_hub = $involves_hub,
-                            r.pages_from = $pages_1,
-                            r.pages_to = $pages_2,
-                            r.experiment_id = $experiment_id
+                        ON CREATE SET r.created = timestamp()
                         """
 
                         session.run(query, {
-                            'from_name': rel['from'],
-                            'to_name': rel['to'],
-                            'similarity': rel['similarity'],
-                            'involves_hub': rel['involves_hub'],
-                            'pages_1': rel['pages_1'],
-                            'pages_2': rel['pages_2'],
-                            'experiment_id': experiment_id
+                            'from': rel['from'],
+                            'to': rel['to'],
+                            'isBase': False
                         })
 
                         succeeded = True
@@ -210,6 +241,7 @@ class SimpleParallelBaseline(AlgorithmBase):
                     except Exception as e:
                         # Your exact conflict detection logic
                         error_str = str(e).lower()
+                        print(f"Conflict {batch_idx}: {e}")
                         if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
                             # THIS IS KEY: We ALWAYS count the conflict
                             total_conflicts += 1
@@ -220,16 +252,11 @@ class SimpleParallelBaseline(AlgorithmBase):
                                 total_retries += 1
 
                                 # Simple exponential backoff
-                                wait_time = 0.1 * (2 ** retry_count)
+                                wait_time = 0.1
                                 time.sleep(wait_time)
-
-                                print(
-                                    f"      Conflict detected, retry {retry_count}/{self.max_retries} after {wait_time:.2f}s")
                             else:
-                                # No more retries left
                                 break
                         else:
-                            # Non-conflict error, don't retry
                             break
 
         return total_conflicts, total_retries, successes

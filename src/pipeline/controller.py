@@ -44,8 +44,8 @@ class PipelineController:
             # 2. REGISTER OTHER BASELINES FOR COMPARISON
             # from src.evaluation import BaselineAlgorithm
             evaluation_framework.register_algorithm(
-                SimpleParallelBaseline,
-                self.config['algorithms']['simple_parallel']
+                MixAndBatchAlgorithm,
+                self.config['algorithms']['mix_and_batch']
             )
             #
             # # 3. REGISTER PARALLEL APPROACHES

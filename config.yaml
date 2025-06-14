@@ -1,18 +1,18 @@
 data:
   input:
-    text_dir: "data/input/text_new/"
+    text_dir: "data/input/pipeline/"
     images_dir: "data/input/images/"
-  output: "data/output/experimental_scenarios_new/scenario_3"
+  output: "data/output/new"
 
 spacy:
-    model: "en_core_web_md"
+    model: "en_core_web_lg"
 
 evaluation:
-    enabled: false
+    enabled: true
     #scenarios: ["high-precision", "moderate-connectivity", "comprehensive"]
 #    scenarios: ["dev_a_precision", "dev_b_balanced", "dev_c_diverse"]
     scenarios: ["dev_a_precision"]
-    runs_per_algorithm: 10
+    runs_per_algorithm: 1
     metrics:
       - "total_time"
       - "batch_processing_time"

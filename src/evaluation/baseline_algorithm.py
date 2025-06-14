@@ -34,9 +34,12 @@ class SimpleSequentialBaseline(AlgorithmBase):
         print(f"Processing {len(relationships)} relationships")
         print(f"Batch size: {self.batch_size}")
 
+
+        self.clear_database()
         # Start resource monitoring
         monitor = ResourceMonitor()
         monitor.start_monitoring()
+
 
         # Start timing
         start_time = time.time()
@@ -58,6 +61,7 @@ class SimpleSequentialBaseline(AlgorithmBase):
             batch_start = time.time()
 
             # Insert the batch
+
             conflicts, retries, successes = self._insert_batch(batch, batch_idx)
 
             # Update metrics
@@ -124,34 +128,30 @@ class SimpleSequentialBaseline(AlgorithmBase):
         conflicts = 0
         retries = 0
         successes = 0
-        experiment_id = f"baseline_{int(time.time() * 1000)}"
 
         with self.driver.session() as session:
             for rel in batch:
                 try:
                     # Simple MERGE query - no optimization
                     query = """
-                    MERGE (from:Entity {name: $from_name})
-                    MERGE (to:Entity {name: $to_name})
-                    SET from.experiment_id = $experiment_id,
-                        to.experiment_id = $experiment_id
+                    MERGE (from:Entity {title: $from})
+                    ON CREATE SET from.isBase = true
+                    ON MATCH SET from.isBase = COALESCE(from.isBase, true)
+                    
+                    MERGE (to:Entity {title: $to})
+                    ON CREATE SET to.isBase = $isBase
+                    ON MATCH SET to.isBase = $isBase
+                    
                     MERGE (from)-[r:LINKS_TO]->(to)
-                    SET r.similarity = $similarity,
-                        r.involves_hub = $involves_hub,
-                        r.pages_from = $pages_1,
-                        r.pages_to = $pages_2,
-                        r.experiment_id = $experiment_id
+                    ON CREATE SET r.created = timestamp()
                     """
 
                     session.run(query, {
-                        'from_name': rel['from'],
-                        'to_name': rel['to'],
-                        'similarity': rel['similarity'],
-                        'involves_hub': rel['involves_hub'],
-                        'pages_1': rel['pages_1'],
-                        'pages_2': rel['pages_2'],
-                        'experiment_id': experiment_id
+                        'from': rel['from'],
+                        'to': rel['to'],
+                        'isBase': False
                     })
+
 
                     successes += 1
 

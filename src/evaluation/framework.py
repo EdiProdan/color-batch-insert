@@ -96,24 +96,17 @@ class AlgorithmBase(ABC):
         pass
 
     def clear_database(self):
-        """Clear only experimental data, preserving original dataset"""
+        # Delete experimental nodes (those with isBase=False)
         with self.driver.session() as session:
-            # Delete only nodes and relationships created during experiments
-            session.run("""
-                MATCH (n:Entity)
-                WHERE n.experiment_id IS NOT NULL
-                DETACH DELETE n
-            """)
+            result = session.run("""
+                        MATCH (n:Entity)
+                        WHERE n.isBase = false
+                        DETACH DELETE n
+                        RETURN count(n) as deleted_count
+                    """)
 
-            # Also clean up any relationships that might reference experiment data
-            session.run("""
-                MATCH ()-[r:LINKS_TO]->()
-                WHERE r.experiment_id IS NOT NULL
-                DELETE r
-            """)
-
-        print("Cleared experimental data, preserved original dataset")
-
+            deleted_count = result.single()["deleted_count"]
+            print(f"Cleared {deleted_count} experimental nodes and their relationships")
     def get_database_stats(self):
         """Get current database statistics"""
         with self.driver.session() as session:
@@ -147,7 +140,7 @@ class EvaluationFramework:
 
     def load_scenario_data(self, scenario_name: str) -> List[Dict]:
 
-        scenario_path = f"{self.config['data']['output']}{scenario_name}/relationships.json"
+        scenario_path = f"{self.config['data']['output']}/relationships.json"
 
         if not os.path.exists(scenario_path):
             raise FileNotFoundError(f"Scenario data not found: {scenario_path}")
@@ -155,7 +148,7 @@ class EvaluationFramework:
         with open(scenario_path, 'r') as f:
             data = json.load(f)
 
-        return data['links_to']
+        return data['LINKS_TO']
 
     def run_evaluation(self):
         """

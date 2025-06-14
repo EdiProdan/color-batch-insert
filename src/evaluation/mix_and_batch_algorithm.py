@@ -138,15 +138,19 @@ class MixAndBatchAlgorithm(AlgorithmBase):
         """
         # Extract numeric part from entity name
         # Handle formats like "C20138" or just numbers
-        numeric_part = ''.join(filter(str.isdigit, str(entity_name)))
+        try:
+            numeric_part = ''.join(filter(str.isdigit, str(entity_name)))
 
-        if not numeric_part:
-            # If no digits, use hash of the string
+            if not numeric_part:
+                # If no digits, use hash of the string
+                return hash(entity_name) % self.num_partitions
+
+            # Use last digit(s)
+            last_digits = numeric_part[-self.hash_digits:]
+            return int(last_digits) % self.num_partitions
+        except ValueError:
             return hash(entity_name) % self.num_partitions
 
-        # Use last digit(s)
-        last_digits = numeric_part[-self.hash_digits:]
-        return int(last_digits) % self.num_partitions
 
     def _generate_diagonal_batches(self) -> List[Set[str]]:
         """
@@ -224,7 +228,7 @@ class MixAndBatchAlgorithm(AlgorithmBase):
         """
         conflicts = 0
         successful = 0
-        experiment_id = f"mix_batch_{partition_code}_{int(time.time() * 1000)}"
+        experiment_simple_parallelid = f"mix_batch_{partition_code}_{int(time.time() * 1000)}"
 
         # Process in smaller batches for transaction management
         for i in range(0, len(partition_rels), self.batch_size):
@@ -234,28 +238,22 @@ class MixAndBatchAlgorithm(AlgorithmBase):
                 for rel in batch:
                     try:
                         query = """
-                        MERGE (from:Entity {name: $from_name})
-                        MERGE (to:Entity {name: $to_name})
-                        SET from.experiment_id = $experiment_id,
-                            to.experiment_id = $experiment_id
-                        MERGE (from)-[r:LINKS_TO]->(to)
-                        SET r.similarity = $similarity,
-                            r.involves_hub = $involves_hub,
-                            r.pages_from = $pages_1,
-                            r.pages_to = $pages_2,
-                            r.partition_code = $partition_code,
-                            r.experiment_id = $experiment_id
-                        """
+                           MERGE (from:Entity {title: $from})
+                           ON CREATE SET from.isBase = true
+                           ON MATCH SET from.isBase = COALESCE(from.isBase, true)
+
+                           MERGE (to:Entity {title: $to})
+                           ON CREATE SET to.isBase = $isBase
+                           ON MATCH SET to.isBase = $isBase
+
+                           MERGE (from)-[r:LINKS_TO]->(to)
+                           ON CREATE SET r.created = timestamp()
+                           """
 
                         session.run(query, {
-                            'from_name': rel['from'],
-                            'to_name': rel['to'],
-                            'similarity': rel['similarity'],
-                            'involves_hub': rel['involves_hub'],
-                            'pages_1': rel['pages_1'],
-                            'pages_2': rel['pages_2'],
-                            'partition_code': partition_code,
-                            'experiment_id': experiment_id
+                            'from': rel['from'],
+                            'to': rel['to'],
+                            'isBase': False
                         })
 
                         successful += 1

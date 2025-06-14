@@ -16,6 +16,7 @@ class TextPipeline:
 
     def process(self):
 
+        page_data = []
         for file in os.listdir(self.text_input_dir):
             try:
                 with open(os.path.join(self.text_input_dir, file), 'r') as f:
@@ -29,14 +30,10 @@ class TextPipeline:
             print(f"\nProcessing file: {file}")
             entities = self.entity_extractor.extract_entities(sentences)
 
-            print(f"Found {len(entities)} entities")
+            #print(f"Found {entities}")
             #
-            # page_data = {
-            #     'file': file,
-            #     'title': page_title,
-            #     # 'sentence_count': len(sentences),
-            #     'entities': entities
-            # }
+            page_data.append({"title": page_title, "entities": entities})
+
             #
             # self.processed_pages.append(page_data)
 
@@ -44,14 +41,14 @@ class TextPipeline:
             # print(f"Processed file: {file}")
             # print(f"Entities found: {len(entities)}")
             # exit(0)
+        print(page_data)
         print("\nBuilding entity relationships...")
-        relationships = self.entity_extractor.build_relationships()
+        relationships = self.entity_extractor.build_relationships(page_data)
 
+        print(f"Built entity relationships: {len(relationships)}")
         self._save_extraction_results(relationships)
 
     def _save_extraction_results(self, relationships):
-        with open(f'{self.output_dir}/processed_pages', 'w') as f:
-            json.dump(self.processed_pages, f, indent=2)
 
         with open(f'{self.output_dir}/relationships.json', 'w') as f:
             json.dump(relationships, f, indent=2)
