@@ -1,14 +1,14 @@
 data:
   input:
-    text_dir: "data/input/text/"
+    text_dir: "data/input/text_new/"
     images_dir: "data/input/images/"
-  output: "data/output/experimental_scenarios/"
+  output: "data/output/experimental_scenarios_new/scenario_3"
 
 spacy:
     model: "en_core_web_md"
 
 evaluation:
-    enabled: true
+    enabled: false
     #scenarios: ["high-precision", "moderate-connectivity", "comprehensive"]
 #    scenarios: ["dev_a_precision", "dev_b_balanced", "dev_c_diverse"]
     scenarios: ["dev_a_precision"]

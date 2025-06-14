@@ -165,7 +165,7 @@ class SemanticAnalyzer:
 
     def _analyze_incoming_relationships(self, relationships: List[Dict]) -> Dict:
         """Analyze semantic patterns in incoming relationship data."""
-        # Extract all unique entities from relationships
+
         all_entities = set()
         entity_frequency = Counter()
 
@@ -207,26 +207,18 @@ class SemanticAnalyzer:
         }
 
     def _classify_entity(self, entity_name: str) -> str:
-        """
-        Classify an entity into semantic types using pattern matching.
 
-        Returns: One of 'identifier', 'geographic', 'person', 'organization', 'concept', 'unknown'
-        """
         entity_lower = entity_name.lower().strip()
 
-        # Check each semantic type
         for semantic_type, patterns in self.type_patterns.items():
-            # Check exact matches
             if 'exact' in patterns and entity_lower in patterns['exact']:
                 return semantic_type
 
-            # Check contains patterns
             if 'contains' in patterns:
                 for pattern in patterns['contains']:
                     if pattern in entity_lower:
                         return semantic_type
 
-            # Check suffix patterns
             if 'suffixes' in patterns:
                 for suffix in patterns['suffixes']:
                     if entity_lower.endswith(suffix):
@@ -235,13 +227,7 @@ class SemanticAnalyzer:
         return 'unknown'
 
     def _assess_conflict_risks(self, database_state: Dict, incoming_analysis: Dict) -> Dict:
-        """
-        Assess potential conflicts between database state and incoming data.
 
-        This is where your semantic intelligence identifies risk patterns.
-        """
-        # Find overlap between high-degree database entities and incoming entities
-        # Add safety for None values
         database_busy_entities = set()
         for entity_info in database_state['high_degree_entities']:
             if entity_info.get('name') is not None:
