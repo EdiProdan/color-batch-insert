@@ -24,7 +24,7 @@ class SimpleParallelBaseline(AlgorithmBase):
 
     def __init__(self, config, driver):
         super().__init__(config, driver)
-        self.batch_size = config.get('batch_size', 50)
+        self.batch_size = config.get('batch_size', 1000)
         self.thread_count = config.get('thread_count', 10)
         self.max_retries = config.get('max_retries', 3)  # Simple retry count
         self.name = config.get('name', 'Simplified Parallel Baseline')
@@ -47,8 +47,13 @@ class SimpleParallelBaseline(AlgorithmBase):
         start_time = time.time()
 
         # Create batches using simple division
-        batches = self._create_simple_batches(relationships)
-        print(f"Created {len(batches)} batches")
+        #batches = self._create_simple_batches(relationships)
+        #print(f"Created {len(batches)} batches")
+
+        batches = []
+        for i in range(0, len(relationships), self.batch_size):
+            batch = relationships[i:i + self.batch_size]
+            batches.append(batch)
 
         # Execute parallel processing
         results = self._execute_parallel_batches(batches)
@@ -92,62 +97,7 @@ class SimpleParallelBaseline(AlgorithmBase):
             batch_processing_times=batch_times
         )
 
-    def _create_simple_batches(self, relationships: List[Dict]) -> List[List[Dict]]:
-        """
-        Creates batches optimized for conflict generation in parallel processing.
-
-        Args:
-            relationships: List of relationship dictionaries
-            batch_size: Target size for each batch
-            workers: Number of parallel workers (used for conflict optimization)
-            conflict_mode: If True, groups relationships by 'from' node to force conflicts
-
-        Returns:
-            List of batches (each batch is a list of relationships)
-        """
-        # Group relationships by 'from' node
-        groups = defaultdict(list)
-        for rel in relationships:
-            groups[rel['from']].append(rel)
-
-        # Create batches within each group
-        batches = []
-        for node, rels in groups.items():
-            # Split group into chunks
-            for i in range(0, len(rels), self.batch_size):
-                batch = rels[i:i + self.batch_size]
-                batches.append((node, batch))  # Store node info for debugging
-
-        # Sort by group size descending (prioritize large groups)
-        batches.sort(key=lambda x: len(x[1]), reverse=True)
-
-        # Interleave batches from different groups to maximize parallel conflicts
-        final_batches = []
-        group_rotation = []
-
-        # Create a round-robin schedule of groups
-        unique_groups = list({batch[0] for batch in batches})
-        for _ in range(self.thread_count):
-            random.shuffle(unique_groups)
-            group_rotation.extend(unique_groups)
-
-        # Assign batches to the rotation schedule
-        batch_dict = defaultdict(list)
-        for node, batch in batches:
-            batch_dict[node].append(batch)
-
-        for group in group_rotation:
-            if batch_dict[group]:
-                final_batches.append(batch_dict[group].pop(0))
-
-        # Add remaining batches
-        for node in batch_dict:
-            final_batches.extend(batch_dict[node])
-
-        print(f"Created {len(final_batches)} batches with focus on {len(unique_groups)} groups")
-        print(f"Top contention groups: {unique_groups[:5]}...")
-
-        return final_batches
+    #
 
     def _execute_parallel_batches(self, batches: List[List[Dict]]) -> List[Dict]:
 
@@ -206,7 +156,6 @@ class SimpleParallelBaseline(AlgorithmBase):
         total_conflicts = 0
         total_retries = 0
         successes = 0
-        experiment_id = f"parallel_baseline_{batch_idx}_{int(time.time() * 1000)}"
 
         with self.driver.session() as session:
             for rel in batch:
@@ -241,7 +190,7 @@ class SimpleParallelBaseline(AlgorithmBase):
                     except Exception as e:
                         # Your exact conflict detection logic
                         error_str = str(e).lower()
-                        print(f"Conflict {batch_idx}: {e}")
+                        #print(f"Conflict {batch_idx}: {e}")
                         if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
                             # THIS IS KEY: We ALWAYS count the conflict
                             total_conflicts += 1
