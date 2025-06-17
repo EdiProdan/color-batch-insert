@@ -24,7 +24,7 @@ class SimpleParallelBaseline(AlgorithmBase):
 
     def __init__(self, config, driver):
         super().__init__(config, driver)
-        self.batch_size = config.get('batch_size', 1000)
+        self.batch_size = config.get('batch_size', 10)
         self.thread_count = config.get('thread_count', 10)
         self.max_retries = config.get('max_retries', 3)  # Simple retry count
         self.name = config.get('name', 'Simplified Parallel Baseline')
@@ -50,11 +50,27 @@ class SimpleParallelBaseline(AlgorithmBase):
         #batches = self._create_simple_batches(relationships)
         #print(f"Created {len(batches)} batches")
 
+
+        #shuffled_relationships = relationships.copy()
+        #random.shuffle(shuffled_relationships)
+
+
+        #batches = []
+        #for i in range(0, len(shuffled_relationships), self.batch_size):
+        #    batch = shuffled_relationships[i:i + self.batch_size]
+        #    batches.append(batch)
+
         batches = []
         for i in range(0, len(relationships), self.batch_size):
-            batch = relationships[i:i + self.batch_size]
-            batches.append(batch)
+             batch = relationships[i:i + self.batch_size]
+             batches.append(batch)
 
+
+
+         #filtered_relationships = [r for r in relationships if "BBC" in r["from"]]
+        #
+        # batches = [filtered_relationships[i:i + self.batch_size]
+        #            for i in range(0, len(filtered_relationships), self.batch_size)]
         # Execute parallel processing
         results = self._execute_parallel_batches(batches)
 
@@ -157,6 +173,7 @@ class SimpleParallelBaseline(AlgorithmBase):
         total_retries = 0
         successes = 0
 
+
         with self.driver.session() as session:
             for rel in batch:
                 retry_count = 0
@@ -165,24 +182,19 @@ class SimpleParallelBaseline(AlgorithmBase):
                 # Try up to max_retries + 1 times (initial attempt + retries)
                 while retry_count <= self.max_retries and not succeeded:
                     try:
-                        query = """
-                        MERGE (from:Entity {title: $from})
-                        ON CREATE SET from.isBase = true
-                        ON MATCH SET from.isBase = COALESCE(from.isBase, true)
+                        session.run("""
+                                    MERGE (from:Entity {title: $from})
+                                    ON CREATE SET from.isBase = false, from.processed_at = timestamp()
+                                    ON MATCH SET from.isBase = COALESCE(from.isBase, false)
+                                    
+                                    MERGE (to:Entity {title: $to})
+                                    ON CREATE SET to.isBase = false, to.processed_at = timestamp()
+                                    ON MATCH SET to.isBase = COALESCE(to.isBase, false)
+                                    
+                                    MERGE (from)-[r:LINKS_TO]->(to)
+                                    ON CREATE SET r.created = timestamp()
 
-                        MERGE (to:Entity {title: $to})
-                        ON CREATE SET to.isBase = $isBase
-                        ON MATCH SET to.isBase = $isBase
-
-                        MERGE (from)-[r:LINKS_TO]->(to)
-                        ON CREATE SET r.created = timestamp()
-                        """
-
-                        session.run(query, {
-                            'from': rel['from'],
-                            'to': rel['to'],
-                            'isBase': False
-                        })
+                                    """, {'from': rel["from"], 'to': rel["to"]})
 
                         succeeded = True
                         successes += 1

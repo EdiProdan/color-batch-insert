@@ -29,8 +29,8 @@ class TextPipeline:
 
             print(f"\nProcessing file: {file}")
             entities = self.entity_extractor.extract_entities(sentences)
-
-            #print(f"Found {entities}")
+            print(len(entities))
+            print(f"Found {entities}")
             #
             page_data.append({"title": page_title, "entities": entities})
 
@@ -40,7 +40,7 @@ class TextPipeline:
             # clasification_test = self.entity_extractor.classify_entities(entities)
             # print(f"Processed file: {file}")
             # print(f"Entities found: {len(entities)}")
-            # exit(0)
+            exit(0)
         print(page_data)
         print("\nBuilding entity relationships...")
         relationships = self.entity_extractor.build_relationships(page_data)

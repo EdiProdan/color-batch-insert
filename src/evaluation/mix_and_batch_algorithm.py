@@ -25,7 +25,7 @@ class MixAndBatchAlgorithm(AlgorithmBase):
 
         # Core parameters from the original algorithm
         self.num_partitions = config.get('num_partitions', 10)  # 10x10 grid
-        self.max_workers = config.get('max_workers', 10)  # Threads per batch
+        self.max_workers = config.get('max_workers', 6)  # Threads per batch
         self.batch_size = config.get('batch_size', 1000)  # Relationships per transaction
         self.hash_digits = config.get('hash_digits', 1)  # How many digits to use
 

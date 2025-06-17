@@ -1,3 +1,4 @@
+from src.evaluation.dynamic_adaptive_algorithm import AdaptiveDynamicBatching
 from src.pipeline.text_pipeline import TextPipeline
 from src.evaluation import EvaluationFramework, SimpleSequentialBaseline, MixAndBatchAlgorithm, SimpleParallelBaseline
 
@@ -44,8 +45,8 @@ class PipelineController:
             # 2. REGISTER OTHER BASELINES FOR COMPARISON
             # from src.evaluation import BaselineAlgorithm
             evaluation_framework.register_algorithm(
-                MixAndBatchAlgorithm,
-                self.config['algorithms']['mix_and_batch']
+                SimpleParallelBaseline,
+                self.config['algorithms']['simple_parallel']
             )
             #
             # # 3. REGISTER PARALLEL APPROACHES

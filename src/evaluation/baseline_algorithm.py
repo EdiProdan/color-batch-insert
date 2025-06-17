@@ -44,9 +44,14 @@ class SimpleSequentialBaseline(AlgorithmBase):
         # Start timing
         start_time = time.time()
 
+
+        #
         # Create simple fixed-size batches
         batches = [relationships[i:i + self.batch_size]
                    for i in range(0, len(relationships), self.batch_size)]
+
+
+
 
         print(f"Created {len(batches)} batches")
 

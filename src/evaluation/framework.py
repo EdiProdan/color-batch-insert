@@ -27,6 +27,7 @@ class PerformanceMetrics:
     run_number: int
 
     # Core performance story (your main research claims)
+
     total_time: float
     throughput: float
     success_rate: float
@@ -96,17 +97,24 @@ class AlgorithmBase(ABC):
         pass
 
     def clear_database(self):
-        # Delete experimental nodes (those with isBase=False)
         with self.driver.session() as session:
-            result = session.run("""
-                        MATCH (n:Entity)
-                        WHERE n.isBase = false
-                        DETACH DELETE n
-                        RETURN count(n) as deleted_count
-                    """)
+            # Count what we're deleting (non-base nodes)
+            count_result = session.run("""
+                MATCH (n:Entity) 
+                WHERE n.isBase IS NULL OR n.isBase = false
+                RETURN count(n) as node_count
+            """)
+            node_count = count_result.single()["node_count"]
 
-            deleted_count = result.single()["deleted_count"]
-            print(f"Cleared {deleted_count} experimental nodes and their relationships")
+            # Delete only non-base nodes
+            session.run("""
+                MATCH (n:Entity) 
+                WHERE n.isBase IS NULL OR n.isBase = false
+                DETACH DELETE n
+            """)
+
+            print(f"Cleared {node_count} non-base Entity nodes and their relationships")
+
     def get_database_stats(self):
         """Get current database statistics"""
         with self.driver.session() as session:
@@ -140,7 +148,7 @@ class EvaluationFramework:
 
     def load_scenario_data(self, scenario_name: str) -> List[Dict]:
 
-        scenario_path = f"{self.config['data']['output']}/relationships.json"
+        scenario_path = f"{self.config['data']['output']}/relationships_bbc_200_connected.json"
 
         if not os.path.exists(scenario_path):
             raise FileNotFoundError(f"Scenario data not found: {scenario_path}")
@@ -165,34 +173,32 @@ class EvaluationFramework:
             print(f"EVALUATING SCENARIO: {scenario}")
             print(f"{'=' * 60}")
 
-            try:
-                relationships = self.load_scenario_data(scenario)
-                print(f"Loaded {len(relationships)} relationships for {scenario}")
 
-                for algorithm_name, algorithm in self.algorithms.items():
-                    print(f"\nTesting {algorithm_name}...")
+            relationships = self.load_scenario_data(scenario)
+            print(f"Loaded {len(relationships)} relationships for {scenario}")
 
-                    for run in range(self.config['evaluation']['runs_per_algorithm']):
-                        print(f"  Run {run + 1}/{self.config['evaluation']['runs_per_algorithm']}")
+            for algorithm_name, algorithm in self.algorithms.items():
+                print(f"\nTesting {algorithm_name}...")
 
-                        # Clear database for clean test
-                        algorithm.clear_database()
+                for run in range(self.config['evaluation']['runs_per_algorithm']):
+                    print(f"  Run {run + 1}/{self.config['evaluation']['runs_per_algorithm']}")
+
+                    # Clear database for clean test
+                    algorithm.clear_database()
 
 
-                        # Run algorithm and collect metrics
-                        metrics = algorithm.insert_relationships(relationships)
-                        metrics.scenario = scenario
-                        metrics.run_number = run + 1
+                    # Run algorithm and collect metrics
+                    metrics = algorithm.insert_relationships(relationships)
+                    metrics.scenario = scenario
+                    metrics.run_number = run + 1
 
-                        self.results.append(metrics)
+                    self.results.append(metrics)
 
-                        # Brief result summary
-                        print(f"    Time: {metrics.total_time:.2f}s, "
-                              f"Throughput: {metrics.throughput:.1f} rel/s")
+                    # Brief result summary
+                    print(f"    Time: {metrics.total_time:.2f}s, "
+                          f"Throughput: {metrics.throughput:.1f} rel/s")
 
-            except Exception as e:
-                print(f"Error processing scenario {scenario}: {e}")
-                continue
+
 
         self.save_results()
 

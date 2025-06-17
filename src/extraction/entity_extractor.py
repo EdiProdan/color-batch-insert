@@ -21,39 +21,53 @@ class EntityExtractor:
 
     def extract_entities(self, sentences):
         entities = set()
-        for sentence in sentences:
+        generic_lemmas = {"thing", "stuff", "example", "reason", "issue", "use", "area", "part", "way", "number"}
+        discard_lower = {"issn", "isbn", "doi"}
 
+        for sentence in sentences:
             doc = self.nlp(sentence)
 
-            # 1. Enhanced NER filtering
+            # 1. High-confidence NER
             for ent in doc.ents:
-                if ent.label_ in {"ORG", "GPE", "LOC", "PRODUCT", "LAW", "EVENT", "WORK_OF_ART"} and len(ent.text) > 3:
-                    if not any(c.isdigit() for c in ent.text):  # Exclude pure numbers
-                        entities.add(ent.text.strip())
+                text = ent.text.strip()
+                if (ent.label_ in {"ORG", "GPE", "LOC", "PRODUCT", "LAW", "EVENT", "WORK_OF_ART"} and
+                        len(text) > 3 and
+                        not any(c.isdigit() for c in text)):
 
-            # 2. Smart noun chunk filtering
+                    text = re.sub(r"^(a|an|the)\s+", "", text, flags=re.IGNORECASE)
+                    if text.lower() not in discard_lower and not re.search(r'https?://|\b\d{4,}\b', text):
+                        entities.add(text)
+
+            # 2. Noun chunks (fallback if not already extracted)
             for chunk in doc.noun_chunks:
-                chunk_text = chunk.text.strip()
-                # Conditions for exclusion
-                if (len(chunk_text) > 3 and
-                        chunk.root.pos_ in {"NOUN", "PROPN"} and
-                        not chunk.root.is_stop and
+                text = chunk.text.strip()
+                root = chunk.root
+
+                if (len(text) > 3 and
+                        root.pos_ in {"NOUN", "PROPN"} and
+                        not root.is_stop and
+                        root.lemma_ not in generic_lemmas and
                         not any(tok.like_num for tok in chunk) and
-                        chunk.root.lemma_ not in {"thing", "something", "example", "reason", "use"}):
+                        not (chunk[0].lower_ == "no" and len(chunk) > 1)):
 
-                    # 3. Contextual filtering (avoid phrases like "no need")
-                    if not (chunk[0].lower_ == "no" and len(chunk) > 1):
-                        entities.add(chunk_text)
+                    text = re.sub(r"^(a|an|the)\s+", "", text, flags=re.IGNORECASE)
 
-        # 4. Post-processing filters
-        filtered_entities = {
+                    # Semantic heuristics
+                    if (text.lower() not in discard_lower and
+                            not re.search(r'https?://|\b\d{4,}\b', text) and
+                            len(text.split()) <= 4 and
+                            not text.lower().startswith(("many ", "some ", "few ", "this ", "that ")) and
+                            root.lemma_ not in generic_lemmas and
+                            all(tok.pos_ not in {"DET", "PRON", "CCONJ", "SCONJ"} for tok in chunk)):
+
+                        # Avoid duplication with higher-confidence NER
+                        if text not in entities:
+                            entities.add(text)
+
+        return {
             ent for ent in entities
-            if not (ent.startswith(('a ', 'an ', 'the ')) or  # Remove articles
-                    ent.lower() in {"issn", "isbn", "doi"})  # Keep important acronyms
+            if 3 < len(ent) <= 100 and not ent.lower().startswith(("a ", "an ", "the "))
         }
-
-        return filtered_entities
-
 
     def build_relationships(self, page_data):
         relationships = []
