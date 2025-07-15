@@ -2,7 +2,7 @@ from datetime import datetime
 import time
 from typing import List, Dict
 
-from src.evaluation.framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
+from src.evaluation.evaluation_framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
 
 class SequentialInsert(AlgorithmBase):

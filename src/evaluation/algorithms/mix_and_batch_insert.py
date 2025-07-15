@@ -2,7 +2,7 @@ import time
 from typing import List, Dict, Set, Tuple
 from collections import defaultdict
 
-from src.evaluation.framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
+from src.evaluation.evaluation_framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
 
 class MixAndBatchInsert(AlgorithmBase):
