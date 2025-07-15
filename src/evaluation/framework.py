@@ -19,7 +19,6 @@ from neo4j import GraphDatabase
 
 @dataclass
 class PerformanceMetrics:
-    """Minimal metrics for rigorous adaptive algorithm research"""
 
     # Research identification (essential)
     algorithm_name: str
@@ -33,20 +32,12 @@ class PerformanceMetrics:
     success_rate: float
 
     # Intelligence investment (your innovation)
-    processing_overhead_time: float
-    actual_conflicts: int
-    retry_count: int
-
-    # Adaptation evidence (what makes you different)
-    adaptation_events: int  # How many times algorithm adjusted
-    final_parallelism: int  # What it settled on
+    processing_overhead: float
+    conflicts: int
 
     # Resource efficiency (scalability story)
     memory_peak: float
     cpu_avg: float
-
-    # Analysis depth (optional but valuable)
-    batch_processing_times: List[float]  # Shows learning patterns
 
 
 class ResourceMonitor:

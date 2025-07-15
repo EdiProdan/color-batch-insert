@@ -7,7 +7,7 @@ from typing import List, Dict, Set, Tuple
 from src.evaluation.framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
 
-class SemanticAwareBatching(AlgorithmBase):
+class ColorBatchInsert(AlgorithmBase):
 
     def __init__(self, config, driver):
         super().__init__(config, driver)
@@ -118,6 +118,7 @@ class SemanticAwareBatching(AlgorithmBase):
     def _greedy_coloring(self, graph: Dict[int, Set[int]]) -> Dict[int, int]:
 
         coloring = {}
+        # Wellsh Powell
         nodes = sorted(graph.keys(), key=lambda n: len(graph[n]), reverse=True)
 
         for node in nodes:

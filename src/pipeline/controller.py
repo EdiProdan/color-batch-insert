@@ -1,14 +1,15 @@
-from src.evaluation.dynamic_adaptive_algorithm import AdaptiveDynamicBatching
+from src.pipeline.image_pipeline import ImagePipeline
 from src.pipeline.text_pipeline import TextPipeline
-from src.evaluation import EvaluationFramework, SimpleSequentialBaseline, MixAndBatchAlgorithm, SimpleParallelBaseline
+from src.evaluation import EvaluationFramework, ColorBatchInsert, MixAndBatchInsert, NaiveParallelInsert, SequentialInsert
 
 
 class PipelineController:
 
     def __init__(self, config):
+        self.image_pipeline = None
         self.config = config
         self.text_pipeline = TextPipeline(self.config)
-        # self.image_pipeline = ImagePipeline(self.config)
+        self.image_pipeline = ImagePipeline(self.config)
         # evaluation: enabled: true
         self.evaluation_enabled = self.config["evaluation"]["enabled"]
 
@@ -18,8 +19,8 @@ class PipelineController:
             self.process_evaluation()
         else:
             print("Running full text processing pipeline")
-            self.text_pipeline.process()
-            # self.image_pipeline.process()
+            #self.text_pipeline.process()
+            self.image_pipeline.process()
             # self.process_evaluation()
 
         print("\nPipeline execution completed successfully.")
@@ -37,9 +38,9 @@ class PipelineController:
             evaluation_framework = EvaluationFramework(self.config)
 
             # 1. REGISTER SIMPLE BASELINE (Control Group)
-            # evaluation_framework.register_algorithm(
-            #     SimpleSequentialBaseline,
-            #     self.config['algorithms']['simple_baseline']
+            evaluation_framework.register_algorithm(
+                SequentialInsert,
+                self.config['algorithms']['simple_baseline']
             # )
 
             # 2. REGISTER OTHER BASELINES FOR COMPARISON

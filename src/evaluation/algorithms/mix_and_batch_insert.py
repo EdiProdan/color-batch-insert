@@ -5,19 +5,7 @@ from collections import defaultdict
 from src.evaluation.framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
 
-class MixAndBatchAlgorithm(AlgorithmBase):
-    """
-    Mix and Batch Algorithm - A proven parallel relationship loading technique.
-
-    This implementation follows the original algorithm exactly:
-    1. Partition nodes into non-overlapping sets using last digit
-    2. Create partition codes combining source and target sets
-    3. Arrange partition codes in a grid
-    4. Select diagonal batches to avoid conflicts
-    5. Process each batch in parallel, batches sequentially
-
-    Reference: "Mix and Batch: A Technique for Fast, Parallel Relationship Loading in Neo4j"
-    """
+class MixAndBatchInsert(AlgorithmBase):
 
     def __init__(self, config, driver):
         super().__init__(config, driver)

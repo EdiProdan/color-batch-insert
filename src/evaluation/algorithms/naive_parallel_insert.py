@@ -7,7 +7,7 @@ from typing import List, Dict
 from src.evaluation.framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
 
-class SimpleParallelBaseline(AlgorithmBase):
+class NaiveParallelInsert(AlgorithmBase):
     """
     Truly simple parallel baseline for thesis research.
 

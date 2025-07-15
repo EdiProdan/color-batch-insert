@@ -5,7 +5,7 @@ from typing import List, Dict
 from src.evaluation.framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
 
-class SimpleSequentialBaseline(AlgorithmBase):
+class SequentialInsert(AlgorithmBase):
     """
     The simplest possible sequential baseline for thesis research.
 
