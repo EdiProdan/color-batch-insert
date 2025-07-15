@@ -15,11 +15,12 @@ evaluation:
     runs_per_algorithm: 1
     metrics:
       - "total_time"
-      - "batch_processing_time"
-      - "conflict_frequency"
       - "throughput"
-      - "memory_usage"
-      - "cpu_utilization"
+      - "success_rate"
+      - "processing_overhead"
+      - "conflicts"
+      - "memory_peak"
+      - "cpu_avg"
     output_dir: "data/evaluation/"
 
 database:
@@ -31,38 +32,27 @@ database:
 
 
 algorithms:
-  # 1. SIMPLE SEQUENTIAL BASELINE (Your Control Group)
-  simple_baseline:
-    name: "Simple Sequential Baseline"
-    description: "Minimal sequential processing with no optimization"
-    batch_size: 500  # Single batch size for initial testing
-    #batch_sizes: [250]  # Array for testing multiple sizes
-    # That's it! Intentionally minimal configuration
+  sequential:
+    name: "Sequential insertion (no parallelization)"
+    batch_size: 500
 
-  # 2. SEQUENTIAL WITH MULTIPLE BATCH SIZES (For comparison)
-  simple_parallel:
-    name: "Simple Parallel Baseline"
-    description: "Naive parallel processing"
+  naive_parallel:
+    name: "Naive parallelization (no conflict detection)"
     batch_size: 100
-    thread_count: 10      # Fixed parallelism
-    max_retries: 3            # Maximum retry attempts per failed relationship
+    thread_count: 10
 
-  # 4. MIX AND BATCH (Published Algorithm)
   mix_and_batch:
-    name: "Mix and Batch Parallel Algorithm"
-    description: "Published parallel loading approach with conflict-free partitioning"
+    name: "Heuristic approach: Mix and Batch"
     num_partitions: 10
-    max_workers: 6
+    thread_count: 6
     batch_size: 1000
     hash_digits: 1
 
-  # 5. YOUR ADAPTIVE ALGORITHM (Research Contribution)
-  adaptive_dynamic:
-    name: "Adaptive Dynamic Batching Algorithm"
-    description: "Intelligent conflict-aware dynamic batching with real-time adaptation"
+  apoc:
+    name: "Parallelization with APOC Procedures"
     batch_size: 5000
     thread_count: 10  # Initial threads
-    max_retries: 3
-    conflict_threshold: 0.05  # 10% triggers adaptation
-    min_threads: 2  # Minimum parallelism
-    max_threads: 10  # Maximum parallelism
+
+  color_batch:
+    name: "Color Batch Insert"
+    thread_count: 10

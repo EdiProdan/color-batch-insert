@@ -76,7 +76,6 @@ class EvaluationFramework:
         output_dir = self.config['evaluation']['output_dir']
         os.makedirs(output_dir, exist_ok=True)
 
-        # Convert dataclasses to dicts for JSON serialization
         results_dict = [asdict(result) for result in self.results]
 
         results_file = f"{output_dir}raw_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -86,7 +85,6 @@ class EvaluationFramework:
         print(f"\nResults saved to: {results_file}")
 
     def close(self):
-        """Clean up resources"""
         self.driver.close()
 
 

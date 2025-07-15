@@ -4,7 +4,7 @@ import time
 from collections import defaultdict
 from typing import List, Dict, Set, Tuple
 
-from src.evaluation.evaluation_framework import PerformanceMetrics, ResourceMonitor, AlgorithmBase
+from src.evaluation import AlgorithmBase, PerformanceMetrics, ResourceMonitor
 
 
 class ColorBatchInsert(AlgorithmBase):

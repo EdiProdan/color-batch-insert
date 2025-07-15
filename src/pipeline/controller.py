@@ -1,6 +1,7 @@
 from src.pipeline.image_pipeline import ImagePipeline
 from src.pipeline.text_pipeline import TextPipeline
-from src.evaluation import EvaluationFramework, ColorBatchInsert, MixAndBatchInsert, NaiveParallelInsert, SequentialInsert
+from src.evaluation import EvaluationFramework, ColorBatchInsert, MixAndBatchInsert, NaiveParallelInsert, \
+    SequentialInsert, evaluation_framework
 
 
 class PipelineController:
@@ -26,36 +27,28 @@ class PipelineController:
         print("\nPipeline execution completed successfully.")
 
     def process_evaluation(self):
-        """
-        Evaluation framework execution with proper algorithm initialization
-        """
+
         print("Initializing evaluation framework...")
 
         evaluation_framework = None
 
         try:
-            # Initialize evaluation framework
             evaluation_framework = EvaluationFramework(self.config)
 
-            # 1. REGISTER SIMPLE BASELINE (Control Group)
-            evaluation_framework.register_algorithm(
-                SequentialInsert,
-                self.config['algorithms']['simple_baseline']
+            # evaluation_framework.register_algorithm(
+            #     SequentialInsert,
+            #     self.config['algorithms']['sequential']
+            # )
+            #
+            # evaluation_framework.register_algorithm(
+            #     NaiveParallelInsert,
+            #     self.config['algorithms']['naive_parallel']
             # )
 
-            # 2. REGISTER OTHER BASELINES FOR COMPARISON
-            # from src.evaluation import BaselineAlgorithm
             evaluation_framework.register_algorithm(
-                SimpleParallelBaseline,
-                self.config['algorithms']['simple_parallel']
+                MixAndBatchInsert,
+                self.config['algorithms']['mix_and_batch']
             )
-            #
-            # # 3. REGISTER PARALLEL APPROACHES
-            # from src.evaluation import WorkingParallelBaseline
-            # evaluation_framework.register_algorithm(
-            #     WorkingParallelBaseline,
-            #     self.config['algorithms']['working_parallel']
-            # )
             #
             # # 4. REGISTER MIX AND BATCH
             # from src.evaluation import MixAndBatchAlgorithm

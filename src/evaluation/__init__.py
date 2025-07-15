@@ -3,6 +3,7 @@ from .algorithm_base import AlgorithmBase
 from .performance_metrics import PerformanceMetrics
 from .resource_monitor import ResourceMonitor
 from .algorithms import (
+    ApocInsert,
     ColorBatchInsert,
     MixAndBatchInsert,
     NaiveParallelInsert,
@@ -15,6 +16,7 @@ __all__ = [
     'AlgorithmBase',
     'PerformanceMetrics',
     'ResourceMonitor',
+    'ApocInsert',
     'ColorBatchInsert',
     'MixAndBatchInsert',
     'NaiveParallelInsert',
