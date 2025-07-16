@@ -1,7 +1,8 @@
 from src.pipeline.image_pipeline import ImagePipeline
 from src.pipeline.text_pipeline import TextPipeline
+from src.pipeline.data_integration_layer import DataIntegrationLayer
 from src.evaluation import EvaluationFramework, ColorBatchInsert, MixAndBatchInsert, NaiveParallelInsert, \
-    SequentialInsert, evaluation_framework
+    SequentialInsert, ApocInsert
 
 
 class PipelineController:
@@ -11,18 +12,19 @@ class PipelineController:
         self.config = config
         self.text_pipeline = TextPipeline(self.config)
         self.image_pipeline = ImagePipeline(self.config)
-        # evaluation: enabled: true
+        self.data_integration_layer = DataIntegrationLayer(self.config)
         self.evaluation_enabled = self.config["evaluation"]["enabled"]
 
     def run_pipeline(self):
         if self.evaluation_enabled:
-            print("Evaluation is enabled")
             self.process_evaluation()
         else:
-            print("Running full text processing pipeline")
-            #self.text_pipeline.process()
-            self.image_pipeline.process()
-            # self.process_evaluation()
+            image_relationships = self.image_pipeline.process()
+            text_relationships = self.text_pipeline.process()
+            integrated_relationships = self.data_integration_layer.merge_relationships(
+                text_relationships, image_relationships
+            )
+            self.data_integration_layer.save_results(integrated_relationships)
 
         print("\nPipeline execution completed successfully.")
 
@@ -35,36 +37,31 @@ class PipelineController:
         try:
             evaluation_framework = EvaluationFramework(self.config)
 
-            # evaluation_framework.register_algorithm(
-            #     SequentialInsert,
-            #     self.config['algorithms']['sequential']
-            # )
-            #
-            # evaluation_framework.register_algorithm(
-            #     NaiveParallelInsert,
-            #     self.config['algorithms']['naive_parallel']
-            # )
+            evaluation_framework.register_algorithm(
+                SequentialInsert,
+                self.config['algorithms']['sequential']
+            )
+
+            evaluation_framework.register_algorithm(
+                NaiveParallelInsert,
+                self.config['algorithms']['naive_parallel']
+            )
 
             evaluation_framework.register_algorithm(
                 MixAndBatchInsert,
                 self.config['algorithms']['mix_and_batch']
             )
-            #
-            # # 4. REGISTER MIX AND BATCH
-            # from src.evaluation import MixAndBatchAlgorithm
-            # evaluation_framework.register_algorithm(
-            #     MixAndBatchAlgorithm,
-            #     self.config['algorithms']['mix_and_batch']
-            # )
 
-            # 5. REGISTER YOUR ADAPTIVE ALGORITHM (when ready)
-            # from src.evaluation import AdaptiveDynamicAlgorithm
-            # evaluation_framework.register_algorithm(
-            #     AdaptiveDynamicAlgorithm,
-            #     self.config['algorithms']['adaptive_dynamic']
-            # )
+            evaluation_framework.register_algorithm(
+                ApocInsert,
+                self.config['algorithms']['apoc']
+            )
 
-            # Execute comprehensive evaluation
+            evaluation_framework.register_algorithm(
+                ColorBatchInsert,
+                self.config['algorithms']['color_batch']
+            )
+
             print("\nStarting algorithm evaluation experiments...")
             evaluation_framework.run_evaluation()
 
