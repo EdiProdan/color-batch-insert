@@ -65,19 +65,15 @@ class TextCleaner:
 
     def _basic_normalization(self, text):
 
-        # Remove excessive whitespace
         text = re.sub(r'\s+', ' ', text)
 
-        # Remove empty lines and excessive line breaks
         text = re.sub(r'\n\s*\n', '\n', text)
 
-        # Basic punctuation spacing fixes
         text = re.sub(r'\s+([.!?])', r'\1', text)
         text = re.sub(r'([.!?])([A-Z])', r'\1 \2', text)
 
         return text
 
     def get_page_title(self, text):
-
         lines = text.strip().split('\n')
         return lines[0].strip() if lines else ""

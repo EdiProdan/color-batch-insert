@@ -25,8 +25,8 @@ class NaiveParallelInsert(AlgorithmBase):
 
         batches = []
         for i in range(0, len(relationships), self.batch_size):
-             batch = relationships[i:i + self.batch_size]
-             batches.append(batch)
+            batch = relationships[i:i + self.batch_size]
+            batches.append(batch)
 
         results = self._execute_parallel_batches(batches)
 
