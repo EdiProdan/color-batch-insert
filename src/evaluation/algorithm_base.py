@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from .performance_metrics import PerformanceMetrics
+from src.evaluation.performance_metrics import PerformanceMetrics
 
 class AlgorithmBase(ABC):
 

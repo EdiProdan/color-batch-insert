@@ -11,6 +11,7 @@ class NaiveParallelInsert(AlgorithmBase):
         super().__init__(config, driver)
         self.batch_size = config.get('batch_size')
         self.thread_count = config.get('thread_count')
+        self.max_retries = config.get('max_retries')
         self.name = config.get('name')
 
     def insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
@@ -103,33 +104,54 @@ class NaiveParallelInsert(AlgorithmBase):
     def _insert_batch(self, batch: List[Dict]) -> tuple:
 
         total_conflicts = 0
+        total_retries = 0
         successes = 0
 
         with self.driver.session() as session:
             for rel in batch:
+                retry_count = 0
+                succeeded = False
 
-                try:
-                    query = """
-                        MERGE (from:Entity {title: $from})
-                        ON CREATE SET from.isBase = false, from.processed_at = timestamp()
-                        ON MATCH SET from.isBase = COALESCE(from.isBase, false)
-                        
-                        MERGE (to:Entity {title: $to})
-                        ON CREATE SET to.isBase = false, to.processed_at = timestamp()
-                        ON MATCH SET to.isBase = COALESCE(to.isBase, false)
-                        
-                        MERGE (from)-[r:LINKS_TO]->(to)
-                        ON CREATE SET r.created_at = timestamp()
-                        """
+                while retry_count <= self.max_retries and not succeeded:
+                    try:
+                        query = """
+                                    MERGE (from:Entity {title: $from})
+                                    ON CREATE SET from.isBase = false, from.processed_at = timestamp()
+                                    ON MATCH SET 
+                                      from.isBase = COALESCE(from.isBase, false),
+                                      from.processed_at = COALESCE(from.processed_at, timestamp())                                    
+                                    
+                                    MERGE (to:Entity {title: $to})
+                                    ON CREATE SET to.isBase = false, to.processed_at = timestamp()
+                                    ON MATCH SET 
+                                      to.isBase = COALESCE(to.isBase, false),
+                                      to.processed_at = COALESCE(to.processed_at, timestamp())
+                                      
+                                    MERGE (from)-[r:LINKS_TO]->(to)
+                                    ON CREATE SET r.created_at = timestamp(), r.weight = 1
+                                    ON MATCH SET r.last_updated = timestamp(), r.weight = r.weight + 1
+                                """
 
-                    session.run(query, {'from': rel["from"], 'to': rel["to"]})
-                    successes += 1
+                        session.run(query, {'from': rel["from"], 'to': rel["to"]})
+                        succeeded = True
+                        # Count success only once per relationship, regardless of retries
+                        successes += 1
 
-                except Exception as e:
-                    error_str = str(e).lower()
-                    if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
-                        total_conflicts += 1
-                    else:
-                        continue
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
+                            # Count conflict only on first failure
+                            if retry_count == 0:
+                                total_conflicts += 1
 
+                            if retry_count < self.max_retries:
+                                retry_count += 1
+                                total_retries += 1
+                                time.sleep(0.1)  # Fixed 0.1 second delay
+                            else:
+                                # Failed after all retries - relationship not inserted
+                                break
+                        else:
+                            # Non-retryable error - relationship not inserted
+                            break
         return total_conflicts, successes
