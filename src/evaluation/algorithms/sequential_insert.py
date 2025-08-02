@@ -12,9 +12,9 @@ class SequentialInsert(AlgorithmBase):
         self.name = config.get('name')
 
     def insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
-        print(f"\n--- {self.name} ---")
-        print(f"Processing {len(relationships)} relationships")
-        print(f"Batch size: {self.batch_size}")
+        # print(f"\n--- {self.name} ---")
+        # print(f"Processing {len(relationships)} relationships")
+        # print(f"Batch size: {self.batch_size}")
 
         monitor = ResourceMonitor()
         monitor.start_monitoring()
@@ -39,8 +39,8 @@ class SequentialInsert(AlgorithmBase):
             batch_time = time.time() - batch_start
             batch_times.append(batch_time)
 
-            if (batch_idx + 1) % 10 == 0 or batch_idx == len(batches) - 1:
-                print(f"  Processed {batch_idx + 1}/{len(batches)} batches")
+          #  if (batch_idx + 1) % 10 == 0 or batch_idx == len(batches) - 1:
+           #     print(f"  Processed {batch_idx + 1}/{len(batches)} batches")
 
         total_time = time.time() - start_time
         resource_metrics = monitor.stop_monitoring()
@@ -48,9 +48,9 @@ class SequentialInsert(AlgorithmBase):
         throughput = len(relationships) / total_time if total_time > 0 else 0
         success_rate = (successful_operations / len(relationships)) * 100
 
-        print(f"\nCompleted in {total_time:.2f} seconds")
-        print(f"Throughput: {throughput:.1f} relationships/second")
-        print(f"Success rate: {success_rate:.1f}%")
+        # print(f"\nCompleted in {total_time:.2f} seconds")
+        # print(f"Throughput: {throughput:.1f} relationships/second")
+        # print(f"Success rate: {success_rate:.1f}%")
 
         return PerformanceMetrics(
             algorithm_name=self.name,
@@ -63,38 +63,45 @@ class SequentialInsert(AlgorithmBase):
 
             processing_overhead=0.0,
             conflicts=actual_conflicts,
+            retries=0,
 
             memory_peak=resource_metrics['memory_peak'],
             cpu_avg=resource_metrics['cpu_avg']
         )
 
     def _insert_batch(self, batch: List[Dict]) -> tuple:
-
         conflicts = 0
         successes = 0
 
-        with self.driver.session() as session:
-            for rel in batch:
-                try:
-                    query = """
-                    MERGE (from:Entity {title: $from})
-                    ON CREATE SET from.isBase = true, from.processed_at = timestamp()
-                    ON MATCH SET from.isBase = COALESCE(from.isBase, false)
-                    
-                    MERGE (to:Entity {title: $to})
-                    ON CREATE SET to.isBase = false, to.processed_at = timestamp()
-                    ON MATCH SET to.isBase = COALESCE(to.isBase, false)
-                    
-                    MERGE (from)-[r:LINKS_TO]->(to)
-                    ON CREATE SET r.created_at = timestamp()
-                    """
+        query = """
+                UNWIND $batch AS rel
+                MERGE (from:Entity {title: rel.from})
+                  ON CREATE SET from.isBase = false, from.processed_at = timestamp()
+                  ON MATCH SET 
+                    from.isBase = COALESCE(from.isBase, false),
+                    from.processed_at = COALESCE(from.processed_at, timestamp())
+        
+                MERGE (to:Entity {title: rel.to})
+                  ON CREATE SET to.isBase = false, to.processed_at = timestamp()
+                  ON MATCH SET 
+                    to.isBase = COALESCE(to.isBase, false),
+                    to.processed_at = COALESCE(to.processed_at, timestamp())
+        
+                MERGE (from)-[r:LINKS_TO]->(to)
+                  ON CREATE SET r.created_at = timestamp(), r.weight = 1
+                  ON MATCH SET r.last_updated = timestamp(), r.weight = r.weight + 1
+         """
 
-                    session.run(query, {'from': rel["from"], 'to': rel["to"]})
-                    successes += 1
-
-                except Exception as e:
-                    error_str = str(e).lower()
-                    if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
-                        conflicts += 1
+        try:
+            with self.driver.session() as session:
+                session.run(query, {'batch': batch})
+            successes = len(batch)
+        except Exception as e:
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
+                conflicts = 1  # One conflict for the whole batch
+            else:
+                # Other error types (syntax, driver, etc.)
+                pass
 
         return conflicts, successes

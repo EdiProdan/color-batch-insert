@@ -36,7 +36,7 @@ class DataIntegrationLayer:
 
         os.makedirs(self.output_dir, exist_ok=True)
 
-        output_path = os.path.join(self.output_dir, "integrated_relationships.json")
+        output_path = os.path.join(self.output_dir, "s3.json")
         with open(output_path, 'w') as f:
             json.dump(relationships, f, indent=2)
 

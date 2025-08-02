@@ -29,7 +29,7 @@ class EvaluationFramework:
 
     def load_scenario_data(self, scenario_name: str) -> List[Dict]:
 
-        scenario_path = f"{self.config['data']['output']}/relationships_bbc_200_connected.json"
+        scenario_path = f"{self.config['data']['output']}/s2_new.json"
 
         if not os.path.exists(scenario_path):
             raise FileNotFoundError(f"Scenario data not found: {scenario_path}")

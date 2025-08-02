@@ -1,6 +1,7 @@
 import concurrent.futures
 import time
 from typing import List, Dict
+import random
 
 from src.evaluation import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
@@ -15,15 +16,24 @@ class NaiveParallelInsert(AlgorithmBase):
         self.name = config.get('name')
 
     def insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
-        print(f"\n--- {self.name} ---")
-        print(f"Processing {len(relationships)} relationships")
-        print(f"Configuration: {self.thread_count} threads, batch size {self.batch_size}")
+        # print(f"\n--- {self.name} ---")
+        # print(f"Processing {len(relationships)} relationships")
+        # print(f"Configuration: {self.thread_count} threads, batch size {self.batch_size}")
 
         monitor = ResourceMonitor()
         monitor.start_monitoring()
 
         start_time = time.time()
 
+        # batches = []
+        # for i in range(0, len(relationships), self.batch_size):
+        #     batch = relationships[i:i + self.batch_size]
+        #     batches.append(batch)
+
+        # Shuffle the list in-place
+        random.shuffle(relationships)
+
+        # Then split into batches
         batches = []
         for i in range(0, len(relationships), self.batch_size):
             batch = relationships[i:i + self.batch_size]
@@ -36,15 +46,16 @@ class NaiveParallelInsert(AlgorithmBase):
 
         total_successful = sum(r['successful'] for r in results)
         total_conflicts = sum(r['conflicts'] for r in results)
+        total_retries = sum(r['retries'] for r in results)
 
         throughput = len(relationships) / total_time if total_time > 0 else 0
         success_rate = (total_successful / len(relationships)) * 100
 
-        print(f"\nResults:")
-        print(f"  Total time: {total_time:.1f}s")
-        print(f"  Throughput: {throughput:.1f} rel/s")
-        print(f"  Success rate: {success_rate:.1f}%")
-        print(f"  Conflicts: {total_conflicts}")
+        # print(f"\nResults:")
+        # print(f"  Total time: {total_time:.1f}s")
+        # print(f"  Throughput: {throughput:.1f} rel/s")
+        # print(f"  Success rate: {success_rate:.1f}%")
+        # print(f"  Conflicts: {total_conflicts}")
 
         return PerformanceMetrics(
             algorithm_name=self.name,
@@ -57,6 +68,7 @@ class NaiveParallelInsert(AlgorithmBase):
 
             processing_overhead=0.0,
             conflicts=total_conflicts,
+            retries=total_retries,
 
             memory_peak=resource_metrics['memory_peak'],
             cpu_avg=resource_metrics['cpu_avg']
@@ -80,7 +92,8 @@ class NaiveParallelInsert(AlgorithmBase):
                     results.append({
                         'successful': 0,
                         'conflicts': 0,
-                        'time': 0
+                        'time': 0,
+                        'retries': 0
                     })
 
         return results
@@ -89,69 +102,66 @@ class NaiveParallelInsert(AlgorithmBase):
 
         batch_start = time.time()
 
-        conflicts, successful = self._insert_batch(batch)
+        conflicts, successful, retries = self._insert_batch(batch)
 
         processing_time = time.time() - batch_start
 
-        print(f"    Thread {batch_id}: {successful}/{len(batch)} successful, {conflicts} conflicts")
+        # print(f"    Thread {batch_id}: {successful}/{len(batch)} successful, {conflicts} conflicts")
 
         return {
             'successful': successful,
             'conflicts': conflicts,
-            'time': processing_time
+            'time': processing_time,
+            'retries': retries,
         }
 
     def _insert_batch(self, batch: List[Dict]) -> tuple:
-
         total_conflicts = 0
         total_retries = 0
         successes = 0
 
-        with self.driver.session() as session:
-            for rel in batch:
-                retry_count = 0
-                succeeded = False
+        retry_count = 0
+        succeeded = False
 
-                while retry_count <= self.max_retries and not succeeded:
-                    try:
-                        query = """
-                                    MERGE (from:Entity {title: $from})
-                                    ON CREATE SET from.isBase = false, from.processed_at = timestamp()
-                                    ON MATCH SET 
-                                      from.isBase = COALESCE(from.isBase, false),
-                                      from.processed_at = COALESCE(from.processed_at, timestamp())                                    
-                                    
-                                    MERGE (to:Entity {title: $to})
-                                    ON CREATE SET to.isBase = false, to.processed_at = timestamp()
-                                    ON MATCH SET 
-                                      to.isBase = COALESCE(to.isBase, false),
-                                      to.processed_at = COALESCE(to.processed_at, timestamp())
-                                      
-                                    MERGE (from)-[r:LINKS_TO]->(to)
-                                    ON CREATE SET r.created_at = timestamp(), r.weight = 1
-                                    ON MATCH SET r.last_updated = timestamp(), r.weight = r.weight + 1
-                                """
+        while retry_count <= self.max_retries and not succeeded:
+            try:
+                query = """
+                UNWIND $batch AS rel
+                MERGE (from:Entity {title: rel.from})
+                  ON CREATE SET from.isBase = false, from.processed_at = timestamp()
+                  ON MATCH SET 
+                    from.isBase = COALESCE(from.isBase, false),
+                    from.processed_at = COALESCE(from.processed_at, timestamp())
 
-                        session.run(query, {'from': rel["from"], 'to': rel["to"]})
-                        succeeded = True
-                        # Count success only once per relationship, regardless of retries
-                        successes += 1
+                MERGE (to:Entity {title: rel.to})
+                  ON CREATE SET to.isBase = false, to.processed_at = timestamp()
+                  ON MATCH SET 
+                    to.isBase = COALESCE(to.isBase, false),
+                    to.processed_at = COALESCE(to.processed_at, timestamp())
 
-                    except Exception as e:
-                        error_str = str(e).lower()
-                        if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
-                            # Count conflict only on first failure
-                            if retry_count == 0:
-                                total_conflicts += 1
+                MERGE (from)-[r:LINKS_TO]->(to)
+                  ON CREATE SET r.created_at = timestamp(), r.weight = 1
+                  ON MATCH SET r.last_updated = timestamp(), r.weight = r.weight + 1
+                """
 
-                            if retry_count < self.max_retries:
-                                retry_count += 1
-                                total_retries += 1
-                                time.sleep(0.1)  # Fixed 0.1 second delay
-                            else:
-                                # Failed after all retries - relationship not inserted
-                                break
-                        else:
-                            # Non-retryable error - relationship not inserted
-                            break
-        return total_conflicts, successes
+                with self.driver.session() as session:
+                    session.run(query, {'batch': batch})
+
+                successes += len(batch)
+                succeeded = True
+
+            except Exception as e:
+                error_str = str(e).lower()
+                if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
+                    total_conflicts += 1  # One conflict for this whole batch attempt
+
+                    if retry_count < self.max_retries:
+                        retry_count += 1
+                        total_retries += 1
+                        time.sleep(0.1)
+                    else:
+                        break  # Max retries reached
+                else:
+                    break  # Non-retryable error
+
+        return total_conflicts, successes, total_retries

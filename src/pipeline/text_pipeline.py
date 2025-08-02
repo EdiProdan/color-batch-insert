@@ -17,6 +17,8 @@ class TextPipeline:
     def process(self):
         print("\nStarting text processing pipeline...")
         page_data = []
+        counter = 0
+        directory_length = len(os.listdir(self.text_input_dir))
         for file in os.listdir(self.text_input_dir):
             try:
                 with open(os.path.join(self.text_input_dir, file), 'r') as f:
@@ -27,12 +29,10 @@ class TextPipeline:
             page_title, clean_text = self.text_cleaner.clean_text(text)
             sentences = self.sentence_segmenter.segment(clean_text)
 
-            print(f"\nProcessing file: {file}")
             entities = self.entity_extractor.extract_entities(sentences)
-            print(len(entities))
-            print(f"Found {entities}")
-
             page_data.append({"title": page_title, "entities": entities})
+            print(f"{counter}/{directory_length}")
+            counter += 1
 
         print("\nBuilding entity relationships...")
         return self.entity_extractor.build_relationships(page_data)

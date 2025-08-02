@@ -1,8 +1,8 @@
 data:
   input:
-    text_dir: "data/input/text_new/"
+    text_dir: "data/input/text/"
     images_dir: "data/input/images/"
-  output: "data/output/new"
+  output: "data/output"
 
 spacy:
     model: "en_core_web_lg"
@@ -34,12 +34,13 @@ database:
 algorithms:
   sequential:
     name: "Sequential insertion (no parallelization)"
-    batch_size: 500
+    batch_size: 1000
 
   naive_parallel:
     name: "Naive parallelization (no conflict detection)"
-    batch_size: 100
-    thread_count: 10
+    batch_size: 1000
+    thread_count: 6
+    max_retries: 99999
 
   mix_and_batch:
     name: "Heuristic approach: Mix and Batch"
@@ -47,12 +48,16 @@ algorithms:
     thread_count: 6
     batch_size: 1000
     hash_digits: 1
+    max_retries: 999
 
   apoc:
     name: "Parallelization with APOC Procedures"
-    batch_size: 5000
-    thread_count: 10  # Initial threads
+    batch_size: 1000
+    thread_count: 6  # Initial threads
+    max_retries: 9999
+
 
   color_batch:
     name: "Color Batch Insert"
-    thread_count: 10
+    thread_count: 6
+    batch_size: 1000

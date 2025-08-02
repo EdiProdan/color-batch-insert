@@ -14,6 +14,7 @@ class PerformanceMetrics:
 
     processing_overhead: float
     conflicts: int
+    retries: int
 
     memory_peak: float
     cpu_avg: float

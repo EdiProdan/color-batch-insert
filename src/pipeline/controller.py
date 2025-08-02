@@ -34,35 +34,41 @@ class PipelineController:
 
         evaluation_framework = None
 
+
         try:
             evaluation_framework = EvaluationFramework(self.config)
-
-            evaluation_framework.register_algorithm(
-                SequentialInsert,
-                self.config['algorithms']['sequential']
-            )
-
-            evaluation_framework.register_algorithm(
-                NaiveParallelInsert,
-                self.config['algorithms']['naive_parallel']
-            )
-
-            evaluation_framework.register_algorithm(
-                MixAndBatchInsert,
-                self.config['algorithms']['mix_and_batch']
-            )
-
-            evaluation_framework.register_algorithm(
-                ApocInsert,
-                self.config['algorithms']['apoc']
-            )
-
+            #
+            #
+            # evaluation_framework.register_algorithm(
+            #     SequentialInsert,
+            #     self.config['algorithms']['sequential']
+            # )
+            # #
+            # #
+            # #
+            # evaluation_framework.register_algorithm(
+            #     NaiveParallelInsert,
+            #     self.config['algorithms']['naive_parallel']
+            # )
+            # # #
+            # evaluation_framework.register_algorithm(
+            #     MixAndBatchInsert,
+            #     self.config['algorithms']['mix_and_batch']
+            # )
+            # # #
+            # evaluation_framework.register_algorithm(
+            #     ApocInsert,
+            #     self.config['algorithms']['apoc']
+            # )
+            #
+            # #
+            #
             evaluation_framework.register_algorithm(
                 ColorBatchInsert,
                 self.config['algorithms']['color_batch']
             )
 
-            print("\nStarting algorithm evaluation experiments...")
+            # print("\nStarting algorithm evaluation experiments...")
             evaluation_framework.run_evaluation()
 
         except Exception as e:
