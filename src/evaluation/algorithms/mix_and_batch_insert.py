@@ -1,4 +1,4 @@
-import concurrent.futures
+import asyncio
 import time
 from typing import List, Dict, Set, Tuple, Any
 from collections import defaultdict
@@ -17,14 +17,17 @@ class MixAndBatchInsert(AlgorithmBase):
         self.max_retries = config.get('max_retries')
         self.name = config.get('name')
 
-    def insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
-        # print(f"\n--- {self.name} ---")
-        # print(f"Processing {len(relationships)} relationships")
-        # print(f"Configuration: {self.num_partitions}x{self.num_partitions} grid, "
-        #       f"{self.thread_count} threads")
+        self.thread_times = []
+        self.db_times = []
+        self.lock_wait_times = []
 
-        monitor = ResourceMonitor()
-        monitor.start_monitoring()
+    def insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
+        return asyncio.run(self._async_insert_relationships(relationships))
+
+    async def _async_insert_relationships(self, relationships: List[Dict]) -> PerformanceMetrics:
+        self.thread_times = []
+        self.db_times = []
+        self.lock_wait_times = []
 
         start_time = time.time()
 
@@ -35,12 +38,14 @@ class MixAndBatchInsert(AlgorithmBase):
 
         # Step 3 & 4: Generate diagonal batches
         diagonal_batches = self._generate_diagonal_batches()
-        # print(f"Created {len(diagonal_batches)} diagonal batches")
 
         # Step 5 & 6: Process each batch
         batch_times = []
         total_conflicts = 0
         total_successful = 0
+
+        monitor = ResourceMonitor()
+        monitor.start_monitoring()
 
         for batch_idx, partition_codes in enumerate(diagonal_batches):
             batch_start = time.time()
@@ -50,10 +55,7 @@ class MixAndBatchInsert(AlgorithmBase):
             if not batch_rels:
                 continue
 
-            # print(f"\nProcessing batch {batch_idx + 1}/{len(diagonal_batches)} "
-            #       f"({len(batch_rels)} relationships)")
-
-            conflicts, successful, retries = self._process_batch_parallel(batch_rels, partition_codes)
+            conflicts, successful, retries = await self._process_batch_parallel(batch_rels, partition_codes)
 
             total_conflicts += conflicts
             total_successful += successful
@@ -62,20 +64,19 @@ class MixAndBatchInsert(AlgorithmBase):
         total_time = time.time() - start_time
         resource_metrics = monitor.stop_monitoring()
 
-        throughput = len(relationships) / total_time if total_time > 0 else 0
+        throughput = len(relationships) / (total_time - prep_time)
         success_rate = (total_successful / len(relationships)) * 100
 
-        # print(f"\nResults:")
-        # print(f"  Total time: {total_time:.1f}s")
-        # print(f"  Preprocessing: {prep_time:.1f}s")
-        # print(f"  Throughput: {throughput:.1f} rel/s")
-        # print(f"  Success rate: {success_rate:.1f}%")
-        # print(f"  Conflicts: {total_conflicts}")
+        thread_wait_time_total = sum(self.lock_wait_times)
+        db_insertion_time_total = sum(self.db_times)
+        db_lock_wait_time = sum(self.lock_wait_times)
 
         return PerformanceMetrics(
             algorithm_name=self.name,
             scenario="",
             run_number=0,
+            thread_count=self.thread_count,
+            batch_size=self.batch_size,
 
             total_time=total_time,
             throughput=throughput,
@@ -83,11 +84,14 @@ class MixAndBatchInsert(AlgorithmBase):
 
             processing_overhead=prep_time,
             conflicts=total_conflicts,
-            retries=retries,
 
-            memory_peak=resource_metrics['memory_peak'],
-            cpu_avg=resource_metrics['cpu_avg']
-        )
+            # New thread metrics
+            db_insertion_time_total=db_insertion_time_total,
+            db_lock_wait_time=db_lock_wait_time,
+
+            # Existing fields
+            system_cores_avg=resource_metrics.get("system_cores_avg")
+            )
 
     def _add_partition_codes(self, relationships: List[Dict]) -> List[Dict]:
         partitioned = []
@@ -117,7 +121,6 @@ class MixAndBatchInsert(AlgorithmBase):
         except ValueError:
             return hash(entity_name) % self.num_partitions
 
-
     def _generate_diagonal_batches(self) -> List[Set[str]]:
 
         batches = []
@@ -139,9 +142,8 @@ class MixAndBatchInsert(AlgorithmBase):
         return [rel for rel in relationships
                 if rel.get('partition_code') in partition_codes]
 
-    def _process_batch_parallel(self, batch_rels: List[Dict],
-                                partition_codes: Set[str]):
-
+    async def _process_batch_parallel(self, batch_rels: List[Dict],
+                                      partition_codes: Set[str]):
 
         partitioned_groups = defaultdict(list)
         for rel in batch_rels:
@@ -151,33 +153,39 @@ class MixAndBatchInsert(AlgorithmBase):
         total_successful = 0
         total_retries = 0
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.thread_count) as executor:
-            futures = {}
+        # Create semaphore to limit concurrent operations
+        semaphore = asyncio.Semaphore(self.thread_count)
 
-            for partition_code, partition_rels in partitioned_groups.items():
-                future = executor.submit(self._process_partition,
-                                         partition_rels, partition_code)
-                futures[future] = partition_code
+        tasks = []
+        for partition_code, partition_rels in partitioned_groups.items():
+            task = self._process_partition_async(partition_rels, partition_code, semaphore)
+            tasks.append(task)
 
-            for future in concurrent.futures.as_completed(futures):
-                partition_code = futures[future]
-                try:
-                    conflicts, successful, retries = future.result()
-                    total_conflicts += conflicts
-                    total_successful += successful
-                    total_retries += retries
-                    # print(
-                    #     f"  Partition {partition_code}: {successful}/{len(partitioned_groups[partition_code])} successful")
-                except Exception as e:
-                    # print(f"  Partition {partition_code} failed: {str(e)}")
-                    pass
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                pass
+            else:
+                conflicts, successful, retries = result
+                total_conflicts += conflicts
+                total_successful += successful
+                total_retries += retries
 
         return total_conflicts, total_successful, total_retries
 
+    async def _process_partition_async(self, partition_rels: List[Dict], partition_code: str, semaphore):
+        async with semaphore:
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, self._process_partition, partition_rels, partition_code)
+
     def _process_partition(self, partition_rels: List[Dict], partition_code: str):
+        thread_start = time.time()
         conflicts = 0
         retries = 0
         successful = 0
+        total_db_time = 0
+        total_lock_wait = 0
 
         for i in range(0, len(partition_rels), self.batch_size):
             batch = partition_rels[i:i + self.batch_size]
@@ -186,6 +194,8 @@ class MixAndBatchInsert(AlgorithmBase):
             succeeded = False
 
             while retry_count <= self.max_retries and not succeeded:
+                db_start = time.time()
+
                 try:
                     query = """
                     UNWIND $batch AS rel
@@ -194,13 +204,13 @@ class MixAndBatchInsert(AlgorithmBase):
                       ON MATCH SET 
                         from.isBase = COALESCE(from.isBase, false),
                         from.processed_at = COALESCE(from.processed_at, timestamp())
-        
+
                     MERGE (to:Entity {title: rel.to})
                       ON CREATE SET to.isBase = false, to.processed_at = timestamp()
                       ON MATCH SET 
                         to.isBase = COALESCE(to.isBase, false),
                         to.processed_at = COALESCE(to.processed_at, timestamp())
-        
+
                     MERGE (from)-[r:LINKS_TO]->(to)
                       ON CREATE SET r.created_at = timestamp(), r.weight = 1
                       ON MATCH SET r.last_updated = timestamp(), r.weight = r.weight + 1
@@ -209,23 +219,33 @@ class MixAndBatchInsert(AlgorithmBase):
                     with self.driver.session() as session:
                         session.run(query, {'batch': batch})
 
+                    db_time = time.time() - db_start
+                    total_db_time += db_time
                     successful += len(batch)
                     succeeded = True
 
                 except Exception as e:
+                    db_time = time.time() - db_start
+                    total_db_time += db_time
+
                     error_str = str(e).lower()
                     if any(keyword in error_str for keyword in ['lock', 'deadlock', 'timeout']):
-                        if retry_count == 0:
-                            conflicts += 1
+                        total_lock_wait += db_time
+                        conflicts += len(batch)
 
                         if retry_count < self.max_retries:
                             retry_count += 1
                             retries += 1
-                            time.sleep(0.1)  # Optional: add exponential backoff if needed
+                            time.sleep(0.1)
                         else:
-                            break  # Give up after max retries
+                            break
                     else:
-                        break  # Non-retryable error
+                        break
+
+        thread_total_time = time.time() - thread_start
+
+        self.thread_times.append(thread_total_time)
+        self.db_times.append(total_db_time)
+        self.lock_wait_times.append(total_lock_wait)
 
         return conflicts, successful, retries
-
