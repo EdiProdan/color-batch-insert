@@ -9,10 +9,8 @@ spacy:
 
 evaluation:
     enabled: true
-    #scenarios: ["high-precision", "moderate-connectivity", "comprehensive"]
-#    scenarios: ["dev_a_precision", "dev_b_balanced", "dev_c_diverse"]
-    scenarios: ["dev_a_precision"]
-    runs_per_algorithm: 1
+    scenarios: ["s1","s2","s3"]
+    runs_per_algorithm: 3
     metrics:
       - "total_time"
       - "throughput"
@@ -30,34 +28,40 @@ database:
     password: "research123"
     database: "research"
 
-
 algorithms:
+
   sequential:
-    name: "Sequential insertion (no parallelization)"
+    name: "Sequential insertion"
     batch_size: 1000
+    thread_count: 1
 
   naive_parallel:
-    name: "Naive parallelization (no conflict detection)"
+    name: "Naive parallelization"
     batch_size: 1000
-    thread_count: 6
-    max_retries: 99999
+    thread_count: 14
+    max_retries: 999999
 
   mix_and_batch:
-    name: "Heuristic approach: Mix and Batch"
-    num_partitions: 10
-    thread_count: 6
+    name: "Mix and Batch"
     batch_size: 1000
+    num_partitions: 10
+    thread_count: 14
     hash_digits: 1
-    max_retries: 999
+    max_retries: 999999
 
   apoc:
-    name: "Parallelization with APOC Procedures"
+    name: "APOC Parallel"
     batch_size: 1000
-    thread_count: 6  # Initial threads
-    max_retries: 9999
+    thread_count: 14
+    max_retries: 9999999
 
+  sapoc:
+    name: "Sequential APOC"
+    batch_size: 1000
+    thread_count: 1
+    max_retries: 9999999
 
   color_batch:
     name: "Color Batch Insert"
-    thread_count: 6
     batch_size: 1000
+    thread_count: 14

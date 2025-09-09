@@ -16,7 +16,10 @@ class EvaluationFramework:
             auth=(
                 config['database']['neo4j']['user'],
                 config['database']['neo4j']['password']
-            )
+            ),
+            max_connection_pool_size=50,
+            connection_acquisition_timeout=60,
+            max_transaction_retry_time=15
         )
         self.algorithms = {}
         self.results = []
@@ -29,7 +32,7 @@ class EvaluationFramework:
 
     def load_scenario_data(self, scenario_name: str) -> List[Dict]:
 
-        scenario_path = f"{self.config['data']['output']}/s2_new.json"
+        scenario_path = f"{self.config['data']['output']}/{scenario_name}.json"
 
         if not os.path.exists(scenario_path):
             raise FileNotFoundError(f"Scenario data not found: {scenario_path}")

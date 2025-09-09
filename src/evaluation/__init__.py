@@ -7,7 +7,8 @@ from .algorithms import (
     ColorBatchInsert,
     MixAndBatchInsert,
     NaiveParallelInsert,
-    SequentialInsert)
+    SequentialInsert,
+    ApocSequentialInsert)
 
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     'ColorBatchInsert',
     'MixAndBatchInsert',
     'NaiveParallelInsert',
-    'SequentialInsert'
+    'SequentialInsert',
+    'ApocSequentialInsert',
 ]

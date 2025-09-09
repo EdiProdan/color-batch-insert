@@ -3,7 +3,7 @@ from typing import List, Dict, Tuple
 from src.evaluation import PerformanceMetrics, ResourceMonitor, AlgorithmBase
 
 
-class ApocInsert(AlgorithmBase):
+class ApocSequentialInsert(AlgorithmBase):
 
     def __init__(self, config, driver):
         super().__init__(config, driver)
@@ -32,6 +32,7 @@ class ApocInsert(AlgorithmBase):
         throughput = len(relationships) / total_time if total_time > 0 else 0
         success_rate = (successful / len(relationships)) * 100 if relationships else 0
 
+        # Calculate thread metrics
         db_insertion_time_total = sum(self.db_times)
         db_lock_wait_time = sum(self.lock_wait_times)
 
@@ -39,7 +40,7 @@ class ApocInsert(AlgorithmBase):
             algorithm_name=self.name,
             scenario="",
             run_number=0,
-            thread_count=self.thread_count,
+            thread_count=1,
             batch_size=self.batch_size,
 
             total_time=total_time,
@@ -56,7 +57,7 @@ class ApocInsert(AlgorithmBase):
         )
 
     def _execute_apoc_batch_processing(self, relationships: List[Dict]) -> Tuple[int, int]:
-        print("  Executing APOC batch processing...")
+        print("  Executing APOC sequential batch processing...")
 
         conflicts = 0
         successful = 0
@@ -90,7 +91,7 @@ class ApocInsert(AlgorithmBase):
                             parallel: $parallel,
                             concurrency: $concurrency,  // Changed from parallelWorkers
                             retries: $max_retries,
-                            params: {relationships: $relationships} 
+                            params: {relationships: $relationships}  // Nested properly
                         }
                     )
                     YIELD batches, total, timeTaken, committedOperations, failedOperations, 
@@ -100,11 +101,10 @@ class ApocInsert(AlgorithmBase):
                 """, {
                     'relationships': relationships,
                     'batch_size': self.batch_size,
-                    'parallel': True,
+                    'parallel': False,
                     'concurrency': self.thread_count,
                     'max_retries': self.max_retries
                 })
-
 
                 apoc_result = result.single()
                 db_time = time.time() - db_start
@@ -133,6 +133,7 @@ class ApocInsert(AlgorithmBase):
                 db_time = time.time() - db_start
                 print(f"      APOC Exception: {str(e)}")
                 conflicts = len(relationships)
+
                 self.db_times.append(db_time)
 
                 error_str = str(e).lower()

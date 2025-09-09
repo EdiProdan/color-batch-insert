@@ -2,7 +2,7 @@ from src.pipeline.image_pipeline import ImagePipeline
 from src.pipeline.text_pipeline import TextPipeline
 from src.pipeline.data_integration_layer import DataIntegrationLayer
 from src.evaluation import EvaluationFramework, ColorBatchInsert, MixAndBatchInsert, NaiveParallelInsert, \
-    SequentialInsert, ApocInsert
+    SequentialInsert, ApocInsert, ApocSequentialInsert
 
 
 class PipelineController:
@@ -37,38 +37,21 @@ class PipelineController:
 
         try:
             evaluation_framework = EvaluationFramework(self.config)
-            #
-            #
-            # evaluation_framework.register_algorithm(
-            #     SequentialInsert,
-            #     self.config['algorithms']['sequential']
-            # )
-            # #
-            # #
-            # #
-            # evaluation_framework.register_algorithm(
-            #     NaiveParallelInsert,
-            #     self.config['algorithms']['naive_parallel']
-            # )
-            # # #
-            # evaluation_framework.register_algorithm(
-            #     MixAndBatchInsert,
-            #     self.config['algorithms']['mix_and_batch']
-            # )
-            # # #
-            # evaluation_framework.register_algorithm(
-            #     ApocInsert,
-            #     self.config['algorithms']['apoc']
-            # )
-            #
-            # #
-            #
-            evaluation_framework.register_algorithm(
-                ColorBatchInsert,
-                self.config['algorithms']['color_batch']
-            )
 
-            # print("\nStarting algorithm evaluation experiments...")
+            alg_classes = {
+                "sequential": SequentialInsert,
+                "naive_parallel": NaiveParallelInsert,
+                "mix_and_batch": MixAndBatchInsert,
+                "apoc": ApocInsert,
+                "sapoc": ApocSequentialInsert,
+                "color_batch": ColorBatchInsert,
+            }
+
+            for key, cls in alg_classes.items():
+                for alg_key, alg_conf in self.config["algorithms"].items():
+                    if alg_key.startswith(key):
+                        evaluation_framework.register_algorithm(cls, alg_conf)
+
             evaluation_framework.run_evaluation()
 
         except Exception as e:
